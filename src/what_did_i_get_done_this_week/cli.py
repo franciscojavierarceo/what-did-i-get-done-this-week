@@ -140,6 +140,11 @@ def cli(timeframe, output, format, no_calendar, no_claude, interactive, display,
       receipts report.md --format markdown --display  # Show Markdown in CLI
       receipts report.json --format html --output presentation.html  # Save to file
 
+    Generate and display:
+      receipts last-week --display                    # Generate and show in CLI
+      receipts today --format json --display         # Generate JSON and show
+      receipts this-week --format html --display     # Generate HTML and preview
+
     Setup:
       receipts setup          # First-time configuration
       receipts status         # Check current setup
@@ -185,12 +190,12 @@ def cli(timeframe, output, format, no_calendar, no_claude, interactive, display,
     is_daily = date_range.start == date_range.end
 
     if is_daily:
-        generate_daily_report(date_range, output, format, no_calendar, no_claude, interactive)
+        generate_daily_report(date_range, output, format, no_calendar, no_claude, interactive, display)
     else:
-        generate_weekly_report(date_range, output, format, no_calendar, no_claude, interactive)
+        generate_weekly_report(date_range, output, format, no_calendar, no_claude, interactive, display)
 
 
-def generate_daily_report(date_range: DateRange, output, format, no_calendar, no_claude, interactive):
+def generate_daily_report(date_range: DateRange, output, format, no_calendar, no_claude, interactive, display: bool = False):
     """Generate a daily review report"""
 
     # Load configuration
@@ -262,47 +267,102 @@ def generate_daily_report(date_range: DateRange, output, format, no_calendar, no
         )
         progress.update(task5, description="✅ Receipts generated")
 
-    # Determine output file
-    if not output:
-        reports_dir = Path(config.output_dir)
-        reports_dir.mkdir(exist_ok=True)
-        if date_name == "today":
-            output = reports_dir / f"today-{target_date}.{format}"
-        elif date_name == "yesterday":
-            output = reports_dir / f"yesterday-{target_date}.{format}"
-        else:
-            output = reports_dir / f"daily-{target_date}.{format}"
+    if display:
+        # Display mode - show content in CLI
+        console.print()
+
+        if format == 'markdown':
+            # Render markdown beautifully in CLI
+            display_panel = Panel.fit(
+                f"📄 [bold cyan]{date_name.title()}'s Report:[/bold cyan]\n"
+                f"🗓️  Date: [bold]{target_date}[/bold]",
+                title="📖 Generated Report",
+                border_style="cyan"
+            )
+            console.print(display_panel)
+            console.print()
+            console.print(Markdown(report))
+
+        elif format == 'json':
+            # Show JSON with syntax highlighting
+            display_panel = Panel.fit(
+                f"📄 [bold cyan]{date_name.title()}'s Report:[/bold cyan]\n"
+                f"🗓️  Date: [bold]{target_date}[/bold]",
+                title="📊 Generated Report (JSON)",
+                border_style="cyan"
+            )
+            console.print(display_panel)
+            console.print()
+
+            # Use Rich's JSON syntax highlighting
+            from rich.syntax import Syntax
+            syntax = Syntax(report, "json", theme="monokai", line_numbers=True)
+            console.print(syntax)
+
+        elif format == 'html':
+            # For HTML, show a sample and suggest saving to file
+            display_panel = Panel.fit(
+                f"📄 [bold cyan]{date_name.title()}'s Report:[/bold cyan]\n"
+                f"🗓️  Date: [bold]{target_date}[/bold]\n\n"
+                f"💡 [yellow]HTML is best viewed in a browser.[/yellow]\n"
+                f"Consider saving with [bold]--output filename.html[/bold].",
+                title="🌐 Generated Report (HTML)",
+                border_style="cyan"
+            )
+            console.print(display_panel)
+            console.print()
+
+            # Show first part of HTML
+            preview = report[:1000] + "\n..." if len(report) > 1000 else report
+            from rich.syntax import Syntax
+            syntax = Syntax(preview, "html", theme="monokai", line_numbers=True)
+            console.print(syntax)
+
+        console.print()
+        console.print("✨ [green]Report display complete![/green]")
+
     else:
-        output = Path(output)
+        # File mode - save to file (existing logic)
+        if not output:
+            reports_dir = Path(config.output_dir)
+            reports_dir.mkdir(exist_ok=True)
+            if date_name == "today":
+                output = reports_dir / f"today-{target_date}.{format}"
+            elif date_name == "yesterday":
+                output = reports_dir / f"yesterday-{target_date}.{format}"
+            else:
+                output = reports_dir / f"daily-{target_date}.{format}"
+        else:
+            output = Path(output)
 
-    # Save report
-    output.write_text(report, encoding='utf-8')
+        # Save report
+        output.write_text(report, encoding='utf-8')
 
-    # Show success message
-    console.print()
-    success_panel = Panel.fit(
-        f"✅ [bold green]{date_name.title()}'s receipts generated![/bold green]\n\n"
-        f"📁 File: [bold]{output}[/bold]\n"
-        f"📊 Format: [bold]{format.upper()}[/bold]\n"
-        f"🗓️  Date: [bold]{target_date}[/bold]",
-        title="🧾 Got Your Receipts!",
-        border_style="green"
-    )
-    console.print(success_panel)
+        # Show success message
+        console.print()
+        success_panel = Panel.fit(
+            f"✅ [bold green]{date_name.title()}'s receipts generated![/bold green]\n\n"
+            f"📁 File: [bold]{output}[/bold]\n"
+            f"📊 Format: [bold]{format.upper()}[/bold]\n"
+            f"🗓️  Date: [bold]{target_date}[/bold]",
+            title="🧾 Got Your Receipts!",
+            border_style="green"
+        )
+        console.print(success_panel)
 
-    # Show preview if interactive
-    if interactive and format == 'markdown':
-        console.print("\n📖 [bold]Preview:[/bold]")
-        preview = report[:1000] + "..." if len(report) > 1000 else report
-        console.print(Markdown(preview))
+        # Show preview if interactive
+        if interactive and format == 'markdown':
+            console.print("\n📖 [bold]Preview:[/bold]")
+            preview = report[:1000] + "..." if len(report) > 1000 else report
+            console.print(Markdown(preview))
 
-    # Offer to open file
-    if interactive:
-        if click.confirm("🔍 Open the report file?"):
-            os.system(f"code '{output}'" if os.system("which code > /dev/null 2>&1") == 0 else f"cat '{output}'")
+        # Offer to open file
+        if interactive:
+            if click.confirm("🔍 Open the report file?"):
+                os.system(f"code '{output}'" if os.system("which code > /dev/null 2>&1") == 0 else f"cat '{output}'")
 
 
-def generate_weekly_report(date_range: DateRange, output, format, no_calendar, no_claude, interactive):
+def generate_weekly_report(date_range: DateRange, output, format, no_calendar, no_claude, interactive, display: bool = False):
     """Generate a weekly review report"""
 
     # Load configuration
@@ -371,52 +431,107 @@ def generate_weekly_report(date_range: DateRange, output, format, no_calendar, n
         )
         progress.update(task5, description="✅ Report generated")
 
-    # Determine output file
-    if not output:
-        week_num = date_range.start.isocalendar()[1]
-        year = date_range.start.year
-        reports_dir = Path(config.output_dir)
-        reports_dir.mkdir(exist_ok=True)
+    if display:
+        # Display mode - show content in CLI
+        console.print()
 
-        # Different naming based on week type
-        today = date.today()
-        days_since_monday = today.weekday()
-        this_monday = today - timedelta(days=days_since_monday)
+        if format == 'markdown':
+            # Render markdown beautifully in CLI
+            display_panel = Panel.fit(
+                f"📄 [bold cyan]Weekly Report:[/bold cyan]\n"
+                f"🗓️  Period: [bold]{date_range.start} to {date_range.end}[/bold]",
+                title="📖 Generated Report",
+                border_style="cyan"
+            )
+            console.print(display_panel)
+            console.print()
+            console.print(Markdown(report))
 
-        if date_range.start == this_monday and date_range.end >= today:
-            # This week (partial)
-            output = reports_dir / f"this-week-{year}-W{week_num:02d}.{format}"
-        else:
-            # Complete week or last week
-            output = reports_dir / f"review-{year}-W{week_num:02d}.{format}"
+        elif format == 'json':
+            # Show JSON with syntax highlighting
+            display_panel = Panel.fit(
+                f"📄 [bold cyan]Weekly Report:[/bold cyan]\n"
+                f"🗓️  Period: [bold]{date_range.start} to {date_range.end}[/bold]",
+                title="📊 Generated Report (JSON)",
+                border_style="cyan"
+            )
+            console.print(display_panel)
+            console.print()
+
+            # Use Rich's JSON syntax highlighting
+            from rich.syntax import Syntax
+            syntax = Syntax(report, "json", theme="monokai", line_numbers=True)
+            console.print(syntax)
+
+        elif format == 'html':
+            # For HTML, show a sample and suggest saving to file
+            display_panel = Panel.fit(
+                f"📄 [bold cyan]Weekly Report:[/bold cyan]\n"
+                f"🗓️  Period: [bold]{date_range.start} to {date_range.end}[/bold]\n\n"
+                f"💡 [yellow]HTML is best viewed in a browser.[/yellow]\n"
+                f"Consider saving with [bold]--output filename.html[/bold].",
+                title="🌐 Generated Report (HTML)",
+                border_style="cyan"
+            )
+            console.print(display_panel)
+            console.print()
+
+            # Show first part of HTML
+            preview = report[:1000] + "\n..." if len(report) > 1000 else report
+            from rich.syntax import Syntax
+            syntax = Syntax(preview, "html", theme="monokai", line_numbers=True)
+            console.print(syntax)
+
+        console.print()
+        console.print("✨ [green]Report display complete![/green]")
+
     else:
-        output = Path(output)
+        # File mode - save to file (existing logic)
+        if not output:
+            week_num = date_range.start.isocalendar()[1]
+            year = date_range.start.year
+            reports_dir = Path(config.output_dir)
+            reports_dir.mkdir(exist_ok=True)
 
-    # Save report
-    output.write_text(report, encoding='utf-8')
+            # Different naming based on week type
+            today = date.today()
+            days_since_monday = today.weekday()
+            this_monday = today - timedelta(days=days_since_monday)
 
-    # Show success message
-    console.print()
-    success_panel = Panel.fit(
-        f"✅ [bold green]Report generated successfully![/bold green]\n\n"
-        f"📁 File: [bold]{output}[/bold]\n"
-        f"📊 Format: [bold]{format.upper()}[/bold]\n"
-        f"🗓️  Period: [bold]{date_range.start} to {date_range.end}[/bold]",
-        title="🎉 Success",
-        border_style="green"
-    )
-    console.print(success_panel)
+            if date_range.start == this_monday and date_range.end >= today:
+                # This week (partial)
+                output = reports_dir / f"this-week-{year}-W{week_num:02d}.{format}"
+            else:
+                # Complete week or last week
+                output = reports_dir / f"review-{year}-W{week_num:02d}.{format}"
+        else:
+            output = Path(output)
 
-    # Show preview if interactive
-    if interactive and format == 'markdown':
-        console.print("\n📖 [bold]Preview:[/bold]")
-        preview = report[:1000] + "..." if len(report) > 1000 else report
-        console.print(Markdown(preview))
+        # Save report
+        output.write_text(report, encoding='utf-8')
 
-    # Offer to open file
-    if interactive:
-        if click.confirm("🔍 Open the report file?"):
-            os.system(f"code '{output}'" if os.system("which code > /dev/null 2>&1") == 0 else f"cat '{output}'")
+        # Show success message
+        console.print()
+        success_panel = Panel.fit(
+            f"✅ [bold green]Report generated successfully![/bold green]\n\n"
+            f"📁 File: [bold]{output}[/bold]\n"
+            f"📊 Format: [bold]{format.upper()}[/bold]\n"
+            f"🗓️  Period: [bold]{date_range.start} to {date_range.end}[/bold]",
+            title="🎉 Success",
+            border_style="green"
+        )
+        console.print(success_panel)
+
+        # Show preview if interactive
+        if interactive and format == 'markdown':
+            console.print("\n📖 [bold]Preview:[/bold]")
+            preview = report[:1000] + "..." if len(report) > 1000 else report
+            console.print(Markdown(preview))
+
+        # Offer to open file
+        if interactive:
+            if click.confirm("🔍 Open the report file?"):
+                os.system(f"code '{output}'" if os.system("which code > /dev/null 2>&1") == 0 else f"cat '{output}'")
 
 
 def setup_command():
