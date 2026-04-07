@@ -131,9 +131,10 @@ def get_week_dates(start_date: str = None) -> DateRange:
 @click.option('--no-claude', is_flag=True, help='Skip Claude activity tracking')
 @click.option('--interactive', '-i', is_flag=True, help='Interactive mode with preview')
 @click.option('--display', '-d', is_flag=True, help='Display rendered report in CLI instead of saving to file')
+@click.option('--no-display', is_flag=True, help='Skip displaying generated report (save to file only)')
 @click.option('--force', is_flag=True, help='Force regeneration even if cached output exists')
 @click.version_option()
-def cli(timeframe, output, format, no_calendar, no_claude, interactive, display, force):
+def cli(timeframe, output, format, no_calendar, no_claude, interactive, display, no_display, force):
     """🎯 What Did I Get Done This Week? v0.1.1
 
     Got the receipts on your productivity! A beautiful CLI tool for tracking
@@ -156,9 +157,10 @@ def cli(timeframe, output, format, no_calendar, no_claude, interactive, display,
       receipts report.json --format html --output presentation.html  # Save to file
 
     Generate and display:
-      receipts last-week --display                    # Generate and show in CLI
-      receipts today --format json --display         # Generate JSON and show
-      receipts this-week --format html --display     # Generate HTML and preview
+      receipts last-week                              # Generate and show in CLI (default)
+      receipts today --format json                   # Generate JSON and show (default)
+      receipts this-week --no-display                # Generate only, skip display
+      receipts last-week --display                   # Show cached report only
 
     Setup:
       receipts setup          # First-time configuration
@@ -207,14 +209,14 @@ def cli(timeframe, output, format, no_calendar, no_claude, interactive, display,
     is_monthly = duration_days > 14  # More than 2 weeks, treat as monthly
 
     if is_daily:
-        generate_daily_report(date_range, output, format, no_calendar, no_claude, interactive, display)
+        generate_daily_report(date_range, output, format, no_calendar, no_claude, interactive, display, no_display)
     elif is_monthly:
-        generate_monthly_report(date_range, output, format, no_calendar, no_claude, interactive, display, timeframe)
+        generate_monthly_report(date_range, output, format, no_calendar, no_claude, interactive, display, no_display, timeframe)
     else:
-        generate_weekly_report(date_range, output, format, no_calendar, no_claude, interactive, display)
+        generate_weekly_report(date_range, output, format, no_calendar, no_claude, interactive, display, no_display)
 
 
-def generate_daily_report(date_range: DateRange, output, format, no_calendar, no_claude, interactive, display: bool = False):
+def generate_daily_report(date_range: DateRange, output, format, no_calendar, no_claude, interactive, display: bool = False, no_display: bool = False):
     """Generate a daily review report"""
 
     # Load configuration
@@ -454,8 +456,53 @@ def generate_daily_report(date_range: DateRange, output, format, no_calendar, no
         )
         console.print(success_panel)
 
-        # Show preview if interactive
-        if interactive and format == 'markdown':
+        # Auto-display by default (unless --no-display is used)
+        if not no_display:
+            console.print()
+            console.print("📺 [bold cyan]Displaying generated report:[/bold cyan]")
+
+            if format == 'markdown':
+                display_panel = Panel.fit(
+                    f"📄 [bold cyan]{date_name.title()}'s Report:[/bold cyan]\n"
+                    f"🗓️  Date: [bold]{target_date}[/bold]",
+                    title="📖 Generated Report",
+                    border_style="cyan"
+                )
+                console.print(display_panel)
+                console.print()
+                console.print(Markdown(report))
+
+            elif format == 'json':
+                display_panel = Panel.fit(
+                    f"📄 [bold cyan]{date_name.title()}'s Report:[/bold cyan]\n"
+                    f"🗓️  Date: [bold]{target_date}[/bold]",
+                    title="📊 Generated Report (JSON)",
+                    border_style="cyan"
+                )
+                console.print(display_panel)
+                console.print()
+                from rich.syntax import Syntax
+                syntax = Syntax(report, "json", theme="monokai", line_numbers=True)
+                console.print(syntax)
+
+            elif format == 'html':
+                display_panel = Panel.fit(
+                    f"📄 [bold cyan]{date_name.title()}'s Report:[/bold cyan]\n"
+                    f"🗓️  Date: [bold]{target_date}[/bold]\n\n"
+                    f"💡 [yellow]HTML is best viewed in a browser.[/yellow]\n"
+                    f"File saved to: [bold]{output}[/bold]",
+                    title="🌐 Generated Report (HTML)",
+                    border_style="cyan"
+                )
+                console.print(display_panel)
+                console.print()
+                preview = report[:1000] + "\n..." if len(report) > 1000 else report
+                from rich.syntax import Syntax
+                syntax = Syntax(preview, "html", theme="monokai", line_numbers=True)
+                console.print(syntax)
+
+        # Legacy interactive preview (kept for compatibility)
+        elif interactive and format == 'markdown':
             console.print("\n📖 [bold]Preview:[/bold]")
             preview = report[:1000] + "..." if len(report) > 1000 else report
             console.print(Markdown(preview))
@@ -466,7 +513,7 @@ def generate_daily_report(date_range: DateRange, output, format, no_calendar, no
                 os.system(f"code '{output}'" if os.system("which code > /dev/null 2>&1") == 0 else f"cat '{output}'")
 
 
-def generate_weekly_report(date_range: DateRange, output, format, no_calendar, no_claude, interactive, display: bool = False):
+def generate_weekly_report(date_range: DateRange, output, format, no_calendar, no_claude, interactive, display: bool = False, no_display: bool = False):
     """Generate a weekly review report"""
 
     # Load configuration
@@ -720,8 +767,53 @@ def generate_weekly_report(date_range: DateRange, output, format, no_calendar, n
         )
         console.print(success_panel)
 
-        # Show preview if interactive
-        if interactive and format == 'markdown':
+        # Auto-display by default (unless --no-display is used)
+        if not no_display:
+            console.print()
+            console.print("📺 [bold cyan]Displaying generated report:[/bold cyan]")
+
+            if format == 'markdown':
+                display_panel = Panel.fit(
+                    f"📄 [bold cyan]Weekly Report:[/bold cyan]\n"
+                    f"🗓️  Period: [bold]{date_range.start} to {date_range.end}[/bold]",
+                    title="📖 Generated Report",
+                    border_style="cyan"
+                )
+                console.print(display_panel)
+                console.print()
+                console.print(Markdown(report))
+
+            elif format == 'json':
+                display_panel = Panel.fit(
+                    f"📄 [bold cyan]Weekly Report:[/bold cyan]\n"
+                    f"🗓️  Period: [bold]{date_range.start} to {date_range.end}[/bold]",
+                    title="📊 Generated Report (JSON)",
+                    border_style="cyan"
+                )
+                console.print(display_panel)
+                console.print()
+                from rich.syntax import Syntax
+                syntax = Syntax(report, "json", theme="monokai", line_numbers=True)
+                console.print(syntax)
+
+            elif format == 'html':
+                display_panel = Panel.fit(
+                    f"📄 [bold cyan]Weekly Report:[/bold cyan]\n"
+                    f"🗓️  Period: [bold]{date_range.start} to {date_range.end}[/bold]\n\n"
+                    f"💡 [yellow]HTML is best viewed in a browser.[/yellow]\n"
+                    f"File saved to: [bold]{output}[/bold]",
+                    title="🌐 Generated Report (HTML)",
+                    border_style="cyan"
+                )
+                console.print(display_panel)
+                console.print()
+                preview = report[:1000] + "\n..." if len(report) > 1000 else report
+                from rich.syntax import Syntax
+                syntax = Syntax(preview, "html", theme="monokai", line_numbers=True)
+                console.print(syntax)
+
+        # Legacy interactive preview (kept for compatibility)
+        elif interactive and format == 'markdown':
             console.print("\n📖 [bold]Preview:[/bold]")
             preview = report[:1000] + "..." if len(report) > 1000 else report
             console.print(Markdown(preview))
@@ -732,7 +824,7 @@ def generate_weekly_report(date_range: DateRange, output, format, no_calendar, n
                 os.system(f"code '{output}'" if os.system("which code > /dev/null 2>&1") == 0 else f"cat '{output}'")
 
 
-def generate_monthly_report(date_range: DateRange, output, format, no_calendar, no_claude, interactive, display: bool = False, timeframe: str = ""):
+def generate_monthly_report(date_range: DateRange, output, format, no_calendar, no_claude, interactive, display: bool = False, no_display: bool = False, timeframe: str = ""):
     """Generate a monthly review report"""
 
     # Load configuration
@@ -891,8 +983,53 @@ def generate_monthly_report(date_range: DateRange, output, format, no_calendar, 
         )
         console.print(success_panel)
 
-        # Show preview if interactive
-        if interactive and format == 'markdown':
+        # Auto-display by default (unless --no-display is used)
+        if not no_display:
+            console.print()
+            console.print("📺 [bold cyan]Displaying generated report:[/bold cyan]")
+
+            if format == 'markdown':
+                display_panel = Panel.fit(
+                    f"📄 [bold cyan]Monthly Report:[/bold cyan]\n"
+                    f"🗓️  Period: [bold]{date_range.start} to {date_range.end}[/bold]",
+                    title="📖 Generated Report",
+                    border_style="cyan"
+                )
+                console.print(display_panel)
+                console.print()
+                console.print(Markdown(report))
+
+            elif format == 'json':
+                display_panel = Panel.fit(
+                    f"📄 [bold cyan]Monthly Report:[/bold cyan]\n"
+                    f"🗓️  Period: [bold]{date_range.start} to {date_range.end}[/bold]",
+                    title="📊 Generated Report (JSON)",
+                    border_style="cyan"
+                )
+                console.print(display_panel)
+                console.print()
+                from rich.syntax import Syntax
+                syntax = Syntax(report, "json", theme="monokai", line_numbers=True)
+                console.print(syntax)
+
+            elif format == 'html':
+                display_panel = Panel.fit(
+                    f"📄 [bold cyan]Monthly Report:[/bold cyan]\n"
+                    f"🗓️  Period: [bold]{date_range.start} to {date_range.end}[/bold]\n\n"
+                    f"💡 [yellow]HTML is best viewed in a browser.[/yellow]\n"
+                    f"File saved to: [bold]{output}[/bold]",
+                    title="🌐 Generated Report (HTML)",
+                    border_style="cyan"
+                )
+                console.print(display_panel)
+                console.print()
+                preview = report[:1000] + "\n..." if len(report) > 1000 else report
+                from rich.syntax import Syntax
+                syntax = Syntax(preview, "html", theme="monokai", line_numbers=True)
+                console.print(syntax)
+
+        # Legacy interactive preview (kept for compatibility)
+        elif interactive and format == 'markdown':
             console.print("\n📖 [bold]Preview:[/bold]")
             preview = report[:800] + "..." if len(report) > 800 else report
             console.print(Markdown(preview))
