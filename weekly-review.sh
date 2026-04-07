@@ -5,10 +5,39 @@
 
 set -e
 
-# Configuration
-GITHUB_USERNAME="franciscojavierarceo"
-REVIEW_DIR="$HOME/dev/weekly-review/reports"
-TEMPLATE_DIR="$HOME/dev/weekly-review/templates"
+# Load environment variables from .env file if it exists
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="$SCRIPT_DIR/.env"
+
+if [[ -f "$ENV_FILE" ]]; then
+    echo "📋 Loading configuration from .env file..."
+    source "$ENV_FILE"
+elif [[ -f "$SCRIPT_DIR/.env.example" ]]; then
+    echo "❌ No .env file found. Please copy .env.example to .env and configure your settings:"
+    echo "   cp .env.example .env"
+    echo "   # Then edit .env with your GitHub username and preferences"
+    exit 1
+else
+    echo "⚠️  No .env file found, using default/environment settings"
+fi
+
+# Configuration with .env support
+GITHUB_USERNAME="${GITHUB_USERNAME:-$(gh api user --jq '.login' 2>/dev/null)}"
+REVIEW_DIR="${REVIEW_DIR:-$HOME/dev/weekly-review/reports}"
+TEMPLATE_DIR="${TEMPLATE_DIR:-$HOME/dev/weekly-review/templates}"
+ENABLE_CALENDAR="${ENABLE_CALENDAR:-true}"
+ENABLE_CLAUDE_TRACKING="${ENABLE_CLAUDE_TRACKING:-true}"
+
+# Validate required configuration
+if [[ -z "$GITHUB_USERNAME" || "$GITHUB_USERNAME" == "your-username" ]]; then
+    echo "❌ GitHub username not configured. Please:"
+    echo "   1. Copy .env.example to .env: cp .env.example .env"
+    echo "   2. Edit .env and set GITHUB_USERNAME=your-actual-username"
+    echo "   3. Or ensure 'gh auth login' is completed"
+    exit 1
+fi
+
+echo "👤 Using GitHub username: $GITHUB_USERNAME"
 
 # Create directories if they don't exist
 mkdir -p "$REVIEW_DIR"
@@ -1264,10 +1293,21 @@ CREATED_PRS=$(fetch_created_prs)
 CREATED_ISSUES=$(fetch_created_issues)
 REVIEWED_PRS=$(fetch_reviewed_prs)
 PRS_IN_PROGRESS=$(fetch_prs_in_progress)
-CALENDAR_EVENTS=$(fetch_calendar_events || echo "1")
+if [[ "$ENABLE_CALENDAR" == "true" ]]; then
+    CALENDAR_EVENTS=$(fetch_calendar_events || echo "1")
+else
+    echo "📅 Calendar integration disabled in .env"
+    CALENDAR_EVENTS="1"
+fi
 DOCUMENTATION_CONTRIBUTIONS=$(fetch_documentation_contributions)
-CLAUDE_DATA=$(fetch_claude_conversation_activity || echo "{}")
-CLAUDE_WORK_CATEGORIZATION=$(categorize_claude_work "$CLAUDE_DATA" "$PRS_IN_PROGRESS")
+if [[ "$ENABLE_CLAUDE_TRACKING" == "true" ]]; then
+    CLAUDE_DATA=$(fetch_claude_conversation_activity || echo "{}")
+    CLAUDE_WORK_CATEGORIZATION=$(categorize_claude_work "$CLAUDE_DATA" "$PRS_IN_PROGRESS")
+else
+    echo "🤖 Claude activity tracking disabled in .env"
+    CLAUDE_DATA='{"sessions": 0, "pr_related": 0, "exploratory": 0}'
+    CLAUDE_WORK_CATEGORIZATION='{"pr_work": 0, "exploratory_work": 0}'
+fi
 
 # Generate the report
 generate_report "$CONTRIB_DATA" "$CREATED_PRS" "$CREATED_ISSUES" "$REVIEWED_PRS" "$CALENDAR_EVENTS" "$CLAUDE_DATA" "$PRS_IN_PROGRESS" "$CLAUDE_WORK_CATEGORIZATION" "$DOCUMENTATION_CONTRIBUTIONS"

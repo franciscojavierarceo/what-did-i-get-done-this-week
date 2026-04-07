@@ -101,11 +101,26 @@ what-did-i-get-done-this-week --help
 
 ## ⚙️ Configuration
 
-### Environment Variables
+The tool uses a `.env` file for secure configuration. The setup script will create this automatically, but you can customize it:
+
+### .env File Configuration
 ```bash
-export GITHUB_USERNAME="your-username"          # Override detected username
-export WEEKLY_REVIEW_DIR="/custom/path"         # Change output directory
+# Required: Your GitHub username
+GITHUB_USERNAME=your-github-username
+
+# Optional: Custom directories
+REVIEW_DIR=/path/to/your/reports
+TEMPLATE_DIR=/path/to/templates
+
+# Optional: Feature toggles
+ENABLE_CALENDAR=true           # Set to false to disable calendar integration
+ENABLE_CLAUDE_TRACKING=true   # Set to false to disable Claude session tracking
 ```
+
+### Security Note
+- The `.env` file is automatically added to `.gitignore`
+- **Never commit your `.env` file** - it contains personal configuration
+- Use `.env.example` as a template for sharing with others
 
 ### Calendar Integration
 ```bash

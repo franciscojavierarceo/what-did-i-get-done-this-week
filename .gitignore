@@ -1,0 +1,25 @@
+# Environment files - never commit these!
+.env
+.env.local
+.env.production
+
+# Reports directory - contains personal data
+reports/
+*.md
+
+# Temporary files
+temp-*
+test-*
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log

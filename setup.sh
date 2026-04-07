@@ -134,6 +134,52 @@ fi
 REVIEW_DIR="$HOME/weekly-review/reports"
 mkdir -p "$REVIEW_DIR"
 
+# Set up .env configuration
+ENV_FILE="$INSTALL_DIR/.env"
+if [[ ! -f "$ENV_FILE" ]]; then
+    echo ""
+    echo "⚙️  Setting up configuration..."
+
+    # Try to detect GitHub username
+    DETECTED_USERNAME=""
+    if command -v gh >/dev/null 2>&1; then
+        DETECTED_USERNAME=$(gh api user --jq '.login' 2>/dev/null || echo "")
+    fi
+
+    if [[ -n "$DETECTED_USERNAME" ]]; then
+        echo "📝 Creating .env with detected GitHub username: $DETECTED_USERNAME"
+        cat > "$ENV_FILE" << EOF
+# Weekly Review Configuration
+GITHUB_USERNAME=$DETECTED_USERNAME
+
+# Optional: Override default directories
+REVIEW_DIR=$REVIEW_DIR
+
+# Optional: Disable features if needed
+ENABLE_CALENDAR=true
+ENABLE_CLAUDE_TRACKING=true
+EOF
+    else
+        echo "📝 Creating .env template - you'll need to add your GitHub username"
+        cp "$SCRIPT_DIR/.env.example" "$ENV_FILE" 2>/dev/null || {
+            cat > "$ENV_FILE" << EOF
+# Weekly Review Configuration
+GITHUB_USERNAME=your-github-username
+
+# Optional: Override default directories
+REVIEW_DIR=$REVIEW_DIR
+
+# Optional: Disable features if needed
+ENABLE_CALENDAR=true
+ENABLE_CLAUDE_TRACKING=true
+EOF
+        }
+        echo "❗ Please edit $ENV_FILE and set your GitHub username"
+    fi
+
+    echo "✅ Configuration saved to: $ENV_FILE"
+fi
+
 echo ""
 echo "🎉 Setup complete!"
 echo ""
