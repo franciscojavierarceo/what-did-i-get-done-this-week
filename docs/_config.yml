@@ -1,0 +1,43 @@
+# GitHub Pages configuration
+title: "What Did I Get Done This Week?"
+description: "Beautiful CLI tool for tracking your GitHub activity, meetings, and accomplishments"
+url: "https://franciscojavierarceo.github.io"
+baseurl: "/what-did-i-get-done-this-week"
+
+# Theme
+theme: minima
+plugins:
+  - jekyll-feed
+  - jekyll-sitemap
+
+# Markdown settings
+markdown: kramdown
+highlighter: rouge
+
+# Navigation
+header_pages:
+  - installation.md
+  - configuration.md
+  - render.md
+  - api.md
+
+# Social links
+github_username: franciscojavierarceo
+
+# Google Analytics (optional)
+# google_analytics: UA-XXXXXXX-X
+
+# SEO
+lang: en
+author:
+  name: Francisco Javier Arceo
+
+# Exclude files from processing
+exclude:
+  - "*.py"
+  - "*.pyc"
+  - "__pycache__/"
+  - ".pytest_cache/"
+  - "venv/"
+  - ".venv/"
+  - "*.egg-info/"
