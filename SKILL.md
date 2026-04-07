@@ -1,12 +1,12 @@
 # What did I get done this week
 
 **Category**: productivity
-**Version**: 1.0.0
-**Description**: Generate comprehensive weekly reviews of your GitHub activity, calendar events, and professional accomplishments for accountability and progress tracking.
+**Version**: 2.0.0
+**Description**: Beautiful Python CLI tool for generating comprehensive weekly reviews of your GitHub activity, calendar events, and professional accomplishments with modern uv package management.
 
 ## Overview
 
-This skill creates detailed weekly summaries that combine:
+This skill creates detailed weekly summaries with a gorgeous terminal interface that combines:
 - GitHub contributions (PRs, issues, reviews, commits)
 - Calendar events (filtered to show only required meetings)
 - Activity patterns and productivity insights
@@ -20,17 +20,24 @@ Perfect for:
 
 ## Features
 
-### 🌟 Weekly Highlights
-- Key GitHub achievements with repository breakdown
+### 🎨 Beautiful CLI Interface
+- Rich terminal output with colors, progress bars, and emojis
+- Interactive setup and preview modes
+- Smart error handling with helpful suggestions
+- Professional formatted tables and panels
+
+### 🌟 Smart Reporting
+- Intelligent timeframe parsing (today, yesterday, this-week, last-week, MM-DD, MM-DD-YY)
+- Multiple output formats (Markdown, HTML, JSON)
+- Auto-generated file naming with timestamps
+- Custom output paths and organization
+
+### 📊 Comprehensive Data
+- GitHub activity with repository breakdown
 - Meeting attendance summary by type
 - Most productive day analysis
 - Work-life balance insights
-
-### 📊 Detailed Breakdowns
-- Day-by-day GitHub activity with specific PRs/issues
-- Required meetings only (excludes personal/declined events)
-- Professional accomplishment tracking
-- Structured markdown output
+- Documentation contribution tracking
 
 ### ⚙️ Smart Filtering
 - Automatically excludes personal calendar events
@@ -42,124 +49,221 @@ Perfect for:
 
 ### Required Tools
 ```bash
+# Python 3.8+ (required)
+python --version
+
 # GitHub CLI (required)
 gh auth login
 
-# Google Workspace CLI (optional, for calendar integration)
+# uv (recommended for development)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+### Optional Tools
+```bash
+# Google Workspace CLI (for calendar integration)
 brew install googleworkspace/cli/gws
 gws auth login
 ```
 
-### GitHub Authentication
-The skill requires GitHub CLI to be authenticated with read access to your repositories.
+### Authentication
+- **GitHub CLI**: Must be authenticated with read access to your repositories
+- **Calendar Integration**: Optional, requires Google Workspace CLI and Calendar API access
 
-### Calendar Integration (Optional)
-For calendar events, you need:
-1. Google Workspace CLI installed
-2. Authentication: `gws auth login`
-3. Calendar API enabled in your Google Cloud project
+## Installation
+
+### Method 1: PyPI (Simplest)
+```bash
+# Install from PyPI
+pip install what-did-i-get-done-this-week
+
+# Setup and run
+receipts setup
+receipts
+```
+
+### Method 2: uv (Recommended for developers)
+```bash
+# Clone repository
+git clone https://github.com/franciscojavierarceo/what-did-i-get-done-this-week
+cd what-did-i-get-done-this-week
+
+# Install with uv
+uv sync
+
+# Setup and run
+uv run receipts setup
+uv run receipts
+```
+
+### Method 3: Development Installation
+```bash
+# Clone and install in development mode
+git clone <repo-url>
+cd what-did-i-get-done-this-week
+pip install -e ".[dev]"
+```
 
 ## Usage
 
-### Basic Usage
+### Basic Commands
 ```bash
-# Generate review for last week
-what-did-i-get-done-this-week
+# Default: last week's receipts
+receipts
 
-# Generate review for specific week
-what-did-i-get-done-this-week 2024-03-25 2024-03-31
+# Specific timeframes
+receipts today                 # Today's activity
+receipts yesterday             # Yesterday's activity
+receipts this-week             # This week so far
+receipts last-week             # Last complete week
+
+# Date formats
+receipts 03-25                 # March 25th (current/last year)
+receipts 03-25-24              # March 25, 2024
 ```
 
-### Quick Setup
+### With uv (recommended)
 ```bash
-# Run the setup script
-./setup.sh
+# All commands work with uv run:
+uv run receipts                # Default (last week)
+uv run receipts today         # Today's receipts
+uv run receipts --interactive # Interactive mode
+```
 
-# This will:
-# - Check dependencies
-# - Set up shell aliases
-# - Configure authentication
-# - Generate your first report
+### Advanced Options
+```bash
+# Output formats
+receipts --format markdown     # Default
+receipts --format html        # HTML output
+receipts --format json        # JSON data
+
+# Customization
+receipts --output custom.md    # Custom output file
+receipts --no-calendar        # Skip calendar integration
+receipts --no-claude          # Skip Claude activity tracking
+receipts --interactive        # Interactive mode with preview
+
+# Setup and status
+receipts setup                # Interactive configuration
+receipts status              # Check current setup
 ```
 
 ## Configuration
 
-### GitHub Username
-The skill auto-detects your GitHub username from `gh` authentication. To override:
+### Automatic Detection
+The tool automatically detects:
+- GitHub username from `gh` authentication
+- Available integrations (GitHub CLI, Google Workspace CLI)
+- Python environment and dependencies
+
+### Manual Configuration
 ```bash
-export GITHUB_USERNAME="your-username"
+# Interactive setup wizard
+receipts setup
+
+# Check current configuration
+receipts status
 ```
 
-### Output Directory
-Reports are saved to `~/weekly-review/reports/`. To change:
-```bash
-export WEEKLY_REVIEW_DIR="/path/to/your/reports"
-```
-
-### Calendar Filtering
-You can customize which events to exclude by editing the filter patterns in the script.
+### Configuration Options
+- **GitHub Username**: Auto-detected or manually specified
+- **Output Directory**: Default `~/weekly-review/reports/` or custom path
+- **Calendar Integration**: Enable/disable meeting tracking
+- **Claude Tracking**: Enable/disable AI activity estimation
+- **Default Format**: Markdown, HTML, or JSON
 
 ## Sample Output
 
+### CLI Experience
+```
+╭─────────────────────────────────────────────────────────────────╮
+│  🎯 What Did I Get Done This Week?                              │
+│     Got the receipts on your productivity! 🧾                  │
+╰─────────────────────────────────────────────────────────────────╯
+
+📅 Generating report for: 2024-03-25 to 2024-03-31
+👤 GitHub user: franciscojavierarceo
+
+🔍 Fetching GitHub contributions... ✅
+📝 Fetching PRs and issues... ✅
+📅 Fetching calendar events... ✅
+📊 Generating report... ✅
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                        🎉 Success                              ┃
+┃  ✅ Report generated successfully!                             ┃
+┃  📁 File: reports/review-2024-W13.md                           ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+```
+
+### Report Content
 ```markdown
 # Weekly Review: 2024-03-25 to 2024-03-31
 
 ## 🌟 Weekly Highlights
 
-### 🎯 Key Achievements
+### 🎯 **Key Achievements**
 - **42 GitHub contributions** across the week
 - **34 code reviews** completed, primarily in: llamastack/llama-stack (18), feast-dev/feast (3)
-- **1 Pull Request(s) created:**
-  - fix(vector_io): honor default_search_mode config and fix sqlite-vec BM25 score inversion
+- **1 Pull Request created:** fix(vector_io): honor default_search_mode config
 
-### 📅 Meeting Highlights
-- **54 professional meetings** attended
+### 📝 **Documentation & Content**
+- **11 documentation PR(s) reviewed**
+- **1 blog post** contribution
+
+### 📅 **Meeting Highlights** (17.1 hours)
+- **24 professional meetings** attended
 - **13 leadership/sync meetings** including 1:1s and team syncs
-- **4 office hours sessions** hosted across different time zones
 
-### 📊 Activity Patterns
+### 📊 **Activity Patterns**
 - **Most productive day:** Tuesday with 12 GitHub contributions
-- **Healthy work-life balance:** No weekend coding activity
-
-## 📊 Weekly Summary
-
-- **Monday 03/25:**
-   - 5 GitHub contributions
-     1. Reviewed: llamastack/llama-stack#5387: docs: blog post for llamastack observability
-     2. Reviewed: llamastack/llama-stack#5383: ci: remove Mergify queue config
-   - 9 required meetings
-     1. 09:15 - Team Leadership Sync
-     2. 10:00 - Sprint Planning
-     3. 14:30 - 1:1 with Manager
+- **Weekend contributions:** 2
 ```
 
-## Installation
+## Development
 
-### Method 1: Direct Download
+### uv Workflow (recommended)
 ```bash
-# Clone or download the skill files
-curl -O https://example.com/weekly-review-skill.tar.gz
-tar -xzf weekly-review-skill.tar.gz
-cd weekly-review-skill
-./install.sh
+# Setup development environment
+git clone <repo>
+cd what-did-i-get-done-this-week
+uv sync
+
+# Run in development
+uv run receipts
+
+# Add dependencies
+uv add <package>
+
+# Run tests
+uv run pytest
+
+# Build package
+uv build
 ```
 
-### Method 2: Manual Setup
-1. Copy the `weekly-review.sh` script to your preferred location
-2. Make it executable: `chmod +x weekly-review.sh`
-3. Add to your PATH or create an alias
-4. Run setup: `./setup.sh`
+### Traditional Workflow
+```bash
+# Install development dependencies
+pip install -e ".[dev]"
+
+# Run tests
+pytest
+
+# Format code
+black src/
+ruff check src/
+
+# Type checking
+mypy src/
+```
 
 ## Automation
 
-### Weekly Cron Job
-Set up automatic weekly reports:
+### Cron Job Setup
 ```bash
-# Run the automation setup
-./cron-setup.sh
-
-# This adds a cron job that runs every Monday at 9 AM
-# Reports are automatically generated and logged
+# Add to crontab for weekly reports every Monday at 9 AM
+0 9 * * 1 cd /path/to/project && uv run receipts > weekly-report.log 2>&1
 ```
 
 ### Integration Ideas
@@ -167,46 +271,58 @@ Set up automatic weekly reports:
 - Email summaries to your manager
 - Integration with OKR tracking tools
 - Export to productivity dashboards
+- GitHub Actions workflows
 
 ## Troubleshooting
 
-### GitHub Issues
+### Common Issues
 ```bash
 # Check GitHub CLI authentication
 gh auth status
 
-# Re-authenticate if needed
-gh auth login
-```
-
-### Calendar Issues
-```bash
-# Check Google Workspace CLI
+# Check Google Workspace CLI (if using calendar)
 gws auth status
 
-# Enable Calendar API
-gws calendar events list
+# Recreate virtual environment
+rm -rf .venv && uv sync
+
+# Check configuration
+receipts status
 ```
 
-### Common Problems
-- **No contributions showing**: Check GitHub username and authentication
-- **Calendar events missing**: Verify Google Calendar API is enabled
-- **Meetings not filtered**: Review calendar event permissions
+### Error Messages
+The CLI provides helpful error messages with next steps:
+- GitHub authentication issues → `gh auth login`
+- Missing configuration → `receipts setup`
+- Invalid timeframes → Clear format examples
+- Calendar integration problems → Setup instructions
 
 ## Contributing
 
-This skill can be customized for different workflows:
-- Add integration with other tools (Jira, Linear, etc.)
-- Customize meeting categorization
-- Add team-specific metrics
-- Integrate with other calendar providers
+This tool can be customized and extended:
+- Add integration with other tools (Jira, Linear, Notion)
+- Customize meeting categorization and filtering
+- Add team-specific metrics and reporting
+- Integrate with other calendar providers (Outlook, Exchange)
+- Create custom output templates and themes
 
 ## Privacy & Security
 
-- All processing happens locally on your machine
-- No data is sent to external services except the APIs you configure
-- GitHub and calendar data stays private
-- Reports are stored locally in markdown format
+- **Local processing** - All data processing happens on your machine
+- **Secure storage** - Configuration stored in `~/.config/` with proper permissions
+- **API permissions** - Uses existing GitHub CLI and Google Workspace CLI authentication
+- **No external services** - No data sent to third-party services
+- **Open source** - Full code transparency for security auditing
+
+## Technology Stack
+
+Built with modern Python tools:
+- **[Rich](https://github.com/Textualize/rich)** - Beautiful terminal output
+- **[Click](https://github.com/pallets/click)** - Command line interface
+- **[Pydantic](https://github.com/pydantic/pydantic)** - Data validation and settings
+- **[uv](https://github.com/astral-sh/uv)** - Fast Python package management
+- **[GitHub CLI](https://cli.github.com/)** - GitHub API integration
+- **[Google Workspace CLI](https://github.com/googleworkspace/cli)** - Calendar integration
 
 ## License
 
@@ -215,4 +331,4 @@ MIT License - feel free to modify and share!
 ---
 
 **Created for professional accountability and productivity tracking.**
-*Perfect for engineers, managers, and anyone who wants to track their weekly impact.*
+*Perfect for engineers, managers, and anyone who wants to track their weekly impact with a beautiful, modern CLI experience.*

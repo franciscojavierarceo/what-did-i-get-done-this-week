@@ -1,130 +1,146 @@
-# What did I get done this week? 📊
+# What Did I Get Done This Week? 🧾
 
-> **A professional accountability tool that generates comprehensive weekly reviews of your GitHub activity, calendar events, and accomplishments.**
+[![PyPI version](https://badge.fury.io/py/what-did-i-get-done-this-week.svg)](https://badge.fury.io/py/what-did-i-get-done-this-week)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Perfect for engineers, managers, and professionals who want to track their weekly impact and maintain accountability.
+> **Got the receipts on your productivity! A CLI tool for tracking what you actually got done.**
 
-## ✨ What You Get
+For engineers, managers, and anyone who wants to answer "what did I do this week?" with actual data.
 
-### 🌟 **Weekly Highlights**
-- GitHub contribution summary with repository breakdown
-- Meeting attendance categorized by type
-- Most productive day analysis
-- Work-life balance insights
+## ✨ Features
 
-### 📅 **Daily Breakdown**
-- Structured day-by-day activity summary
-- GitHub PRs, issues, and reviews with specific titles
-- Required meetings only (filters out personal/declined events)
-- Professional accomplishment tracking
-
-### 📈 **Professional Insights**
-- Code review impact across repositories
-- Meeting patterns and time allocation
-- Productivity trends and patterns
-- Achievement validation for status updates
+🎨 **Nice CLI** with colors, progress bars, and interactive setup
+📊 **GitHub Integration** - Track commits, PRs, reviews, and issues
+📅 **Calendar Integration** - Meeting tracking (Google Workspace)
+📝 **Documentation Tracking** - Blog posts, docs, README contributions
+🤖 **AI Activity Tracking** - Estimate Claude/AI-assisted development work
+🎯 **Multiple Output Formats** - Markdown, HTML, and JSON
+⚡ **Fast & Reliable** - Uses GitHub CLI and Google Workspace CLI
+🔧 **Configurable** - Interactive setup with good defaults
 
 ## 🚀 Quick Start
 
-### One-Line Installation
-```bash
-# Local installation
-git clone <this-repo>
-cd weekly-review-skill
-./setup.sh
-```
-
-### Manual Installation
-```bash
-# Download the files
-curl -O https://example.com/weekly-review.sh
-chmod +x weekly-review.sh
-
-# Run setup
-./setup.sh
-```
-
-## 📋 Prerequisites
-
-- **GitHub CLI** (`gh`) - for accessing your GitHub data
-- **jq** - for JSON processing
-- **Google Workspace CLI** (optional) - for calendar integration
-
-The setup script will install these automatically on macOS via Homebrew.
-
-## 💡 Usage
+### Installation
 
 ```bash
-# Generate review for last week
-what-did-i-get-done-this-week
+# Install from PyPI
+pip install what-did-i-get-done-this-week
 
-# Generate review for specific week
-what-did-i-get-done-this-week 2024-03-25 2024-03-31
-
-# View help
-what-did-i-get-done-this-week --help
+# Or install from source
+git clone https://github.com/franciscojavierarceo/what-did-i-get-done-this-week
+cd what-did-i-get-done-this-week/python-v2
+pip install -e .
 ```
 
-## 📊 Sample Output
+### Setup
+
+```bash
+# Interactive setup (recommended)
+what-did-i-get-done-this-week setup
+```
+
+The setup wizard will guide you through:
+- GitHub authentication
+- Calendar integration (optional)
+- Output preferences
+- Feature configuration
+
+### Generate Your First Report
+
+```bash
+# Generate report for last week
+what-did-i-get-done-this-week generate
+
+# Interactive mode with preview
+what-did-i-get-done-this-week generate --interactive
+
+# Custom date range
+what-did-i-get-done-this-week generate --start-date 2024-03-25
+
+# Different output format
+what-did-i-get-done-this-week generate --format html
+```
+
+## 📖 Sample Output
 
 ```markdown
 # Weekly Review: 2024-03-25 to 2024-03-31
 
 ## 🌟 Weekly Highlights
 
-### 🎯 Key Achievements
+### 🎯 **Key Achievements**
 - **42 GitHub contributions** across the week
 - **34 code reviews** completed, primarily in: llamastack/llama-stack (18), feast-dev/feast (3)
-- **1 Pull Request created:**
-  - fix(vector_io): honor default_search_mode config and fix sqlite-vec BM25 score inversion
+- **1 Pull Request created:** fix(vector_io): honor default_search_mode config
 
-### 📅 Meeting Highlights
-- **54 professional meetings** attended
+### 📝 **Documentation & Content**
+- **11 documentation PR(s) reviewed**
+- **1 blog post** contribution
+
+### 📅 **Meeting Highlights** (17.1 hours)
+- **24 professional meetings** attended
 - **13 leadership/sync meetings** including 1:1s and team syncs
-- **4 office hours sessions** hosted across different time zones
 
-### 📊 Activity Patterns
+### 📊 **Activity Patterns**
 - **Most productive day:** Tuesday with 12 GitHub contributions
-- **Healthy work-life balance:** No weekend coding activity
-
-## 📊 Weekly Summary
-
-- **Monday 03/25:**
-   - 5 GitHub contributions
-     1. Reviewed: llamastack/llama-stack#5387: docs: blog post for llamastack observability
-     2. Reviewed: llamastack/llama-stack#5383: ci: remove Mergify queue config
-   - 9 required meetings
-     1. 09:15 - Team Leadership Sync
-     2. 10:00 - Sprint Planning
-     3. 14:30 - 1:1 with Manager
+- **Weekend contributions:** 2
 ```
 
-## ⚙️ Configuration
+## 🎨 Beautiful CLI Experience
 
-The tool uses a `.env` file for secure configuration. The setup script will create this automatically, but you can customize it:
+```
+╭─────────────────────────────────────────────────────────────────╮
+│  🎯 What Did I Get Done This Week?                              │
+│     Got the receipts on your productivity! 🧾                  │
+╰─────────────────────────────────────────────────────────────────╯
 
-### .env File Configuration
-```bash
-# Required: Your GitHub username
-GITHUB_USERNAME=your-github-username
+📅 Generating report for: 2024-03-25 to 2024-03-31
+👤 GitHub user: your-username
 
-# Optional: Custom directories
-REVIEW_DIR=/path/to/your/reports
-TEMPLATE_DIR=/path/to/templates
+🔍 Fetching GitHub contributions... ✅
+📝 Fetching PRs and issues... ✅
+📅 Fetching calendar events... ✅
+🤖 Analyzing Claude activity... ✅
+📊 Generating report... ✅
 
-# Optional: Feature toggles
-ENABLE_CALENDAR=true           # Set to false to disable calendar integration
-ENABLE_CLAUDE_TRACKING=true   # Set to false to disable Claude session tracking
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                        🎉 Success                              ┃
+┃                                                                ┃
+┃  ✅ Report generated successfully!                             ┃
+┃                                                                ┃
+┃  📁 File: /Users/you/weekly-review/reports/review-2024-W13.md  ┃
+┃  📊 Format: MARKDOWN                                           ┃
+┃  🗓️  Period: 2024-03-25 to 2024-03-31                         ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 ```
 
-### Security Note
-- The `.env` file is automatically added to `.gitignore`
-- **Never commit your `.env` file** - it contains personal configuration
-- Use `.env.example` as a template for sharing with others
+## 🔧 Configuration
 
-### Calendar Integration
+The tool uses a smart configuration system with interactive setup:
+
 ```bash
-# Install Google Workspace CLI
+# Check current configuration
+what-did-i-get-done-this-week status
+
+# Reconfigure
+what-did-i-get-done-this-week setup
+```
+
+### Configuration Options
+
+- **GitHub Username** - Auto-detected from GitHub CLI
+- **Output Directory** - Where to save reports
+- **Calendar Integration** - Enable/disable meeting tracking
+- **Claude Tracking** - Enable/disable AI activity estimation
+- **Output Formats** - Markdown, HTML, or JSON
+
+## 📅 Calendar Integration
+
+For meeting tracking, install Google Workspace CLI:
+
+```bash
+# macOS
 brew install googleworkspace/cli/gws
 
 # Authenticate
@@ -134,126 +150,98 @@ gws auth login
 # https://console.developers.google.com/apis/api/calendar-json.googleapis.com
 ```
 
-## 🔧 Customization
+## 🤝 Use Cases
 
-### Meeting Filters
-Edit the calendar filtering logic in `weekly-review.sh` to customize which events are included:
+- **Weekly 1:1s with managers** - Actually have something to talk about
+- **Personal tracking** - See what you actually did
+- **Performance reviews** - Historical contribution data
+- **Team retrospectives** - Understand work patterns
+- **Client reports** - Show what you worked on
+- **Time management** - Meeting vs. coding balance
+
+## 🎯 Commands
 
 ```bash
-# Current filters exclude:
-# - Personal events (daycare, writing, etc.)
-# - Declined meetings
-# - Working location markers
-# - Busy/placeholder events
+# Core commands
+what-did-i-get-done-this-week generate          # Generate report
+what-did-i-get-done-this-week setup            # Interactive setup
+what-did-i-get-done-this-week status           # Check configuration
+
+# Generate options
+--start-date YYYY-MM-DD    # Custom week start date
+--output PATH              # Custom output file
+--format FORMAT            # markdown, html, json
+--no-calendar              # Skip calendar integration
+--no-claude                # Skip Claude tracking
+--interactive              # Interactive mode with preview
+
+# Examples
+what-did-i-get-done-this-week generate --interactive
+what-did-i-get-done-this-week generate --start-date 2024-03-25 --format html
+what-did-i-get-done-this-week generate --no-calendar --output custom-report.md
 ```
-
-### Report Format
-Modify the `generate_report()` function to customize the output format, add sections, or change styling.
-
-## 🤖 Automation
-
-### Weekly Cron Job
-```bash
-# Add to crontab (runs every Monday at 9 AM)
-crontab -e
-
-# Add this line:
-0 9 * * 1 /path/to/what-did-i-get-done-this-week >> ~/weekly-review/weekly.log 2>&1
-```
-
-### Team Integration Ideas
-- Slack bot for sharing team summaries
-- Email reports to managers
-- Integration with OKR tracking
-- Dashboard aggregation for team metrics
 
 ## 🔒 Privacy & Security
 
-- **Local Processing**: All data processing happens on your machine
-- **No External Sharing**: Reports are stored locally in markdown format
-- **API Access Only**: Only accesses GitHub/Google APIs with your permissions
-- **Open Source**: Transparent code you can audit and modify
+- **Local processing** - All data stays on your machine
+- **Secure configuration** - Config stored in `~/.config/what-did-i-get-done-this-week/`
+- **API access only** - Uses GitHub CLI and Google Workspace CLI permissions
+- **No data sharing** - Reports are generated and stored locally
+- **Open source** - Audit the code yourself
 
-## 🛠️ Troubleshooting
+## 🛠️ Development
 
-### GitHub Issues
 ```bash
-# Check authentication
-gh auth status
+# Setup development environment
+git clone https://github.com/franciscojavierarceo/what-did-i-get-done-this-week
+cd what-did-i-get-done-this-week/python-v2
 
-# Re-authenticate
-gh auth login
+# Install in development mode
+pip install -e ".[dev]"
 
-# Test API access
-gh api user
+# Run tests
+pytest
+
+# Format code
+black src/
+ruff check src/
+
+# Type checking
+mypy src/
 ```
 
-### Calendar Issues
-```bash
-# Check Google Workspace CLI
-gws auth status
+## 📈 Roadmap
 
-# Test calendar access
-gws calendar events list
+- **Slack/Teams integration** for sharing summaries
+- **Web dashboard** for team analytics
+- **Custom templates** and themes
+- **More integrations** (Jira, Linear, etc.)
+- **Team aggregation** features
+- **Export formats** (PDF, CSV)
 
-# Enable Calendar API
-# Visit: https://console.developers.google.com/apis/api/calendar-json.googleapis.com
-```
+## 🤝 Contributing
 
-### Common Problems
-- **No contributions**: Check GitHub username and authentication
-- **Missing meetings**: Verify calendar API permissions
-- **Command not found**: Check PATH or restart terminal
-
-## 🤝 Sharing with Your Team
-
-This skill is designed to be easily shared! Here's how to get your team using it:
-
-### Quick Team Setup
-1. Share this repository with your team
-2. Each person runs `./setup.sh`
-3. Everyone gets their own personalized weekly reviews
-4. No data sharing - everyone's reports stay private
-
-### Benefits for Teams
-- **Consistent reporting format** across the team
-- **Easy status updates** for standups and 1:1s
-- **Productivity insights** for individuals
-- **Meeting pattern analysis** for team optimization
-
-## 📈 Use Cases
-
-- **Weekly 1:1s with managers** - structured talking points
-- **Personal accountability** - track your professional impact
-- **Performance reviews** - historical data on contributions
-- **Time management** - understand meeting vs. coding time
-- **Team retrospectives** - aggregate patterns and insights
-
-## 🔄 Updates
-
-To update the skill to the latest version:
-```bash
-cd ~/.local/share/weekly-review-skill
-git pull
-./setup.sh
-```
-
-## 🎯 Future Enhancements
-
-Potential additions (contributions welcome!):
-- Integration with Jira, Linear, or other project management tools
-- Slack/Teams bot integration
-- Web dashboard for team analytics
-- Integration with time tracking tools
-- Custom meeting categorization rules
-- Export formats (PDF, CSV, JSON)
+We welcome contributions! Please see our [contributing guide](CONTRIBUTING.md) for details on:
+- Setting up the development environment with uv
+- Code style and testing guidelines
+- Adding new features and integrations
+- Bug reports and feature requests
 
 ## 📄 License
 
-MIT License - feel free to modify, share, and improve!
+MIT License - feel free to modify and share!
+
+## 🙏 Acknowledgments
+
+Built with love using:
+- [Rich](https://github.com/Textualize/rich) for beautiful terminal output
+- [Click](https://github.com/pallets/click) for CLI interface
+- [Pydantic](https://github.com/pydantic/pydantic) for data validation
+- [GitHub CLI](https://cli.github.com/) for GitHub integration
+- [Google Workspace CLI](https://github.com/googleworkspace/cli) for calendar integration
 
 ---
 
-**Perfect for professional accountability and productivity tracking.**
+**Got the receipts on your productivity! 🚀**
 
-*Built for engineers and managers who want to understand and communicate their weekly impact.*
+*For engineers, managers, and anyone who wants to track what they actually get done.*

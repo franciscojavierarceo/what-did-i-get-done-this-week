@@ -12,58 +12,75 @@ Automatically generates professional weekly reviews that show:
 
 ## 📦 How to Share with Others
 
-### Option 1: Direct Package Share
+### Option 1: PyPI Installation (Easiest)
 ```bash
-# Zip the entire skill package
-tar -czf what-did-i-get-done-this-week.tar.gz weekly-review-skill/
+# Recipients just run:
+pip install what-did-i-get-done-this-week
+receipts setup
+receipts
+```
+
+### Option 2: uv Installation (Recommended for developers)
+```bash
+# Clone and setup with uv
+git clone https://github.com/franciscojavierarceo/what-did-i-get-done-this-week
+cd what-did-i-get-done-this-week
+uv sync
+uv run receipts setup
+uv run receipts
+```
+
+### Option 3: Direct Package Share
+```bash
+# Zip the entire project
+tar -czf what-did-i-get-done-this-week.tar.gz what-did-i-get-done-this-week/
 
 # Share the file - recipient runs:
 tar -xzf what-did-i-get-done-this-week.tar.gz
-cd weekly-review-skill
-./setup.sh
-```
-
-### Option 2: Git Repository
-```bash
-# Create a git repo and push to GitHub/GitLab
-cd weekly-review-skill
-git init
-git add .
-git commit -m "Initial commit: What did I get done this week skill"
-# Push to your preferred git hosting
-
-# Others can then:
-git clone <your-repo-url>
-cd weekly-review-skill
-./setup.sh
-```
-
-### Option 3: Simple Script Share
-```bash
-# Just share the main script file
-# Recipients need to manually install dependencies (gh, jq)
-cp weekly-review.sh ~/Desktop/
-# Share weekly-review.sh + quick setup instructions
+cd what-did-i-get-done-this-week
+uv sync
+uv run receipts setup
 ```
 
 ## ⚡ Quick Start for Recipients
 
-1. **Download/clone the skill package**
-2. **Run setup**: `./setup.sh`
-3. **Generate report**: `what-did-i-get-done-this-week`
+### Method 1: PyPI (Simplest)
+```bash
+pip install what-did-i-get-done-this-week
+receipts setup
+receipts
+```
 
-The setup script handles:
-- ✅ Installing dependencies (GitHub CLI, jq)
-- ✅ Setting up authentication
-- ✅ Creating command aliases
-- ✅ Configuring directories
+### Method 2: uv (Best for developers)
+```bash
+git clone <repo-url>
+cd what-did-i-get-done-this-week
+uv sync
+uv run receipts
+```
 
 ## 🎁 What Recipients Get
 
-### Command Options
+### Beautiful CLI Commands
 ```bash
-what-did-i-get-done-this-week              # Last week
-what-did-i-get-done-this-week 2024-03-25 2024-03-31  # Custom range
+receipts                    # Last week's receipts (default)
+receipts today             # Today's receipts
+receipts yesterday         # Yesterday's receipts
+receipts this-week         # This week so far
+receipts last-week         # Last week
+receipts 03-25             # Specific date (MM-DD)
+receipts 03-25-24          # Specific date (MM-DD-YY)
+receipts setup             # Interactive setup
+receipts status            # Check configuration
+```
+
+### Advanced Options
+```bash
+receipts --interactive           # Interactive mode with preview
+receipts --format html          # HTML output
+receipts --format json          # JSON output
+receipts --no-calendar          # Skip calendar integration
+receipts --output custom.md     # Custom output file
 ```
 
 ### Sample Output Preview
@@ -71,33 +88,62 @@ what-did-i-get-done-this-week 2024-03-25 2024-03-31  # Custom range
 # Weekly Review: 2024-03-25 to 2024-03-31
 
 ## 🌟 Weekly Highlights
-- **42 GitHub contributions** across the week
-- **54 professional meetings** attended
-- **Most productive day:** Tuesday with 12 contributions
 
-## 📊 Weekly Summary
-- **Monday 03/25:**
-   - 5 GitHub contributions
-     1. Reviewed: repo/project#123: Fix authentication bug
-   - 9 required meetings
-     1. 09:15 - Team Leadership Sync
+### 🎯 **Key Achievements**
+- **42 GitHub contributions** across the week
+- **34 code reviews** completed, primarily in: llamastack/llama-stack (18)
+- **1 Pull Request created:** fix(vector_io): honor default_search_mode config
+
+### 📅 **Meeting Highlights** (17.1 hours)
+- **24 professional meetings** attended
+- **13 leadership/sync meetings** including 1:1s and team syncs
+
+### 📊 **Activity Patterns**
+- **Most productive day:** Tuesday with 12 GitHub contributions
+- **Weekend contributions:** 2
 ```
+
+## 🔧 Setup Requirements
+
+Recipients need:
+
+### Required
+- **Python 3.8+**
+- **GitHub CLI**: `brew install gh` (macOS) or equivalent
+- **Git authentication**: `gh auth login`
+
+### Optional (for calendar integration)
+- **Google Workspace CLI**: `brew install googleworkspace/cli/gws`
+- **Calendar auth**: `gws auth login`
+
+## 🎨 Beautiful CLI Experience
+
+Recipients get a gorgeous terminal interface with:
+- 🎯 **Color-coded output** with emojis and styling
+- ⚡ **Progress bars** for data fetching
+- 📊 **Formatted tables** for configuration status
+- 🎉 **Success panels** with clear file paths
+- 💡 **Helpful error messages** with next steps
 
 ## 🔧 Customization Options
 
 Recipients can easily customize:
 
 ### Meeting Filters
-Edit which calendar events to include/exclude
+Edit which calendar events to include/exclude during setup
 
 ### Report Sections
-Add or remove sections from the weekly report
+Choose which data to include (GitHub, calendar, Claude tracking)
 
 ### Output Format
-Change markdown styling, add company branding
+- Markdown (default) for readability
+- HTML for sharing/presentations
+- JSON for programmatic use
 
-### Integration
-Connect with Slack, email, or other tools
+### File Naming
+- Auto-generated timestamps
+- Custom output paths
+- Organized directory structure
 
 ## 🤝 Team Benefits
 
@@ -134,25 +180,56 @@ Connect with Slack, email, or other tools
 2. **Use for 1:1 prep** with managers
 3. **Share highlights in team standups**
 4. **Track patterns** over multiple weeks
-5. **Set up automation** for consistent reports
+5. **Set up automation** with cron jobs
 
 ### Common Use Cases
-- Weekly manager updates
-- Performance review preparation
-- Personal productivity tracking
-- Team workload balancing
-- Client activity reports
+- Weekly manager updates: `receipts last-week`
+- Daily standups: `receipts yesterday`
+- Sprint reviews: `receipts this-week`
+- Performance reviews: Historical reports
+- Client updates: `receipts --format html`
+
+### Power User Tips
+```bash
+# Interactive mode for first-time users
+receipts --interactive
+
+# Generate multiple formats for sharing
+receipts --format html --output presentation.html
+receipts --format json --output data.json
+
+# Custom date ranges
+receipts 03-25    # Specific day
+receipts 03-25-24 # Different year
+```
 
 ## 🚀 Getting Started
 
-1. **Share this package** with your team/colleagues
-2. **Everyone runs** `./setup.sh`
+1. **Install** via PyPI or clone the repo
+2. **Run setup** with `receipts setup`
 3. **Generate first report** to see the magic
 4. **Customize** filters and format as needed
-5. **Automate** with cron jobs if desired
+5. **Share with team** using the methods above
+
+### For Teams
+```bash
+# Share installation instructions
+echo "pip install what-did-i-get-done-this-week && receipts setup"
+
+# Or share the uv setup for developers
+echo "git clone <repo> && cd <repo> && uv sync && uv run receipts setup"
+```
+
+## 🔒 Privacy & Security
+
+- **Local processing** - All data stays on each person's machine
+- **Secure config** - Settings stored in `~/.config/`
+- **API permissions** - Uses existing GitHub/Google CLI auth
+- **No central server** - Completely distributed
+- **Open source** - Full code transparency
 
 ---
 
 **Ready to transform how you and your team track professional impact? Share away! 🎉**
 
-*Each person gets their own private, powerful weekly accountability system.*
+*Each person gets their own private, powerful weekly accountability system with a beautiful CLI interface.*
