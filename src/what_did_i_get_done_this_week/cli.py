@@ -614,31 +614,35 @@ def render_command(file_path_str: str, output: Optional[str], format: str, inter
     if display:
         console.print("📺 Output mode: [bold cyan]Display in CLI[/bold cyan]")
 
-    # For file mode, check if we can use cached output
+    # Check if we can use cached output (for both file and display modes)
     output_path = None
     use_cached = False
-    if not display:
-        # Determine output file path first to check caching
-        if output:
-            output_path = Path(output)
-        else:
-            # Auto-generate output filename with new extension
-            input_stem = file_path.stem
-            format_extensions = {'markdown': 'md', 'html': 'html', 'json': 'json'}
-            new_extension = format_extensions[format]
-            output_path = file_path.parent / f"{input_stem}.{new_extension}"
+    cache_info = ""
+    # Determine output file path to check caching (for both modes)
+    if output and not display:
+        output_path = Path(output)
+    else:
+        # Auto-generate output filename with new extension
+        input_stem = file_path.stem
+        format_extensions = {'markdown': 'md', 'html': 'html', 'json': 'json'}
+        new_extension = format_extensions[format]
+        output_path = file_path.parent / f"{input_stem}.{new_extension}"
 
-            # If output would overwrite input, add suffix
-            if output_path == file_path:
-                output_path = file_path.parent / f"{input_stem}-converted.{new_extension}"
+        # If output would overwrite input, add suffix
+        if output_path == file_path:
+            output_path = file_path.parent / f"{input_stem}-converted.{new_extension}"
 
-        # Check if cached output exists and is newer than input
-        if not force and output_path.exists():
-            input_mtime = file_path.stat().st_mtime
-            output_mtime = output_path.stat().st_mtime
+    # Check if cached output exists and is newer than input
+    if not force and output_path.exists():
+        input_mtime = file_path.stat().st_mtime
+        output_mtime = output_path.stat().st_mtime
 
-            if output_mtime > input_mtime:
-                use_cached = True
+        if output_mtime > input_mtime:
+            use_cached = True
+            cache_info = f"⚡ [yellow]Cache available[/yellow] (use --force for fresh)"
+
+            # For file mode, use cached file and return
+            if not display:
                 console.print(f"⚡ [yellow]Using cached output:[/yellow] {output_path}")
                 console.print(f"💡 [dim]Use --force to regenerate[/dim]")
 
@@ -661,9 +665,17 @@ def render_command(file_path_str: str, output: Optional[str], format: str, inter
                         os.system(f"code '{output_path}'" if os.system("which code > /dev/null 2>&1") == 0 else f"cat '{output_path}'")
 
                 return
-
-    if use_cached:
-        return  # This shouldn't be reached, but just in case
+            else:
+                # For display mode, show cache status but continue to display
+                console.print(cache_info)
+        else:
+            cache_info = "🔄 [dim]Cache outdated, regenerating[/dim]"
+            if display:
+                console.print(cache_info)
+    else:
+        cache_info = "🆕 [dim]No cache found, generating fresh[/dim]"
+        if display:
+            console.print(cache_info)
 
     # Show progress with spinner
     with Progress(
@@ -673,53 +685,77 @@ def render_command(file_path_str: str, output: Optional[str], format: str, inter
         transient=True,
     ) as progress:
 
-        # Read the existing report
-        task1 = progress.add_task("📖 Reading report file...", total=None)
-        try:
-            report = read_report(file_path)
-            progress.update(task1, description="✅ Report file loaded")
-        except Exception as e:
-            progress.update(task1, description="❌ Failed to read report file")
-            console.print(f"❌ [red]Could not read report:[/red] {e}")
-            raise click.Abort()
+        # For display mode with cache, read from cached file if available
+        if display and use_cached and output_path.exists():
+            task1 = progress.add_task("⚡ Reading cached output...", total=None)
+            try:
+                rendered_content = output_path.read_text(encoding='utf-8')
+                progress.update(task1, description="✅ Cached output loaded")
 
-        # Get the appropriate formatter
-        task2 = progress.add_task("🎨 Preparing formatter...", total=None)
-        try:
-            if format == 'markdown':
-                formatter = MarkdownFormatter()
-            elif format == 'html':
-                formatter = HTMLFormatter()
-            elif format == 'json':
-                formatter = JSONFormatter()
-            else:
-                raise ValueError(f"Unknown format: {format}")
+                # Get the report metadata for display
+                source_report = read_report(file_path)
+            except Exception as e:
+                progress.update(task1, description="❌ Failed to read cached file")
+                console.print(f"❌ [red]Could not read cached file:[/red] {e}")
+                use_cached = False  # Fall back to regeneration
 
-            progress.update(task2, description="✅ Formatter ready")
-        except Exception as e:
-            progress.update(task2, description="❌ Formatter setup failed")
-            console.print(f"❌ [red]Formatter error:[/red] {e}")
-            raise click.Abort()
+        if not (display and use_cached):
+            # Read the existing report and generate fresh content
+            task1 = progress.add_task("📖 Reading report file...", total=None)
+            try:
+                report = read_report(file_path)
+                source_report = report
+                progress.update(task1, description="✅ Report file loaded")
+            except Exception as e:
+                progress.update(task1, description="❌ Failed to read report file")
+                console.print(f"❌ [red]Could not read report:[/red] {e}")
+                raise click.Abort()
 
-        # Generate the new report
-        task3 = progress.add_task(f"🔄 Converting to {format.upper()}...", total=None)
-        try:
-            rendered_content = formatter.format(report)
-            progress.update(task3, description=f"✅ Converted to {format.upper()}")
-        except Exception as e:
-            progress.update(task3, description="❌ Conversion failed")
-            console.print(f"❌ [red]Conversion error:[/red] {e}")
-            raise click.Abort()
+            # Get the appropriate formatter
+            task2 = progress.add_task("🎨 Preparing formatter...", total=None)
+            try:
+                if format == 'markdown':
+                    formatter = MarkdownFormatter()
+                elif format == 'html':
+                    formatter = HTMLFormatter()
+                elif format == 'json':
+                    formatter = JSONFormatter()
+                else:
+                    raise ValueError(f"Unknown format: {format}")
+
+                progress.update(task2, description="✅ Formatter ready")
+            except Exception as e:
+                progress.update(task2, description="❌ Formatter setup failed")
+                console.print(f"❌ [red]Formatter error:[/red] {e}")
+                raise click.Abort()
+
+            # Generate the new report
+            task3 = progress.add_task(f"🔄 Converting to {format.upper()}...", total=None)
+            try:
+                rendered_content = formatter.format(report)
+                progress.update(task3, description=f"✅ Converted to {format.upper()}")
+            except Exception as e:
+                progress.update(task3, description="❌ Conversion failed")
+                console.print(f"❌ [red]Conversion error:[/red] {e}")
+                raise click.Abort()
 
     if display:
         # Display mode - show content in CLI
         console.print()
 
+        # Prepare cache status for display
+        cache_status = ""
+        if use_cached:
+            cache_status = f"⚡ [yellow]Cached output[/yellow]"
+        else:
+            cache_status = f"🔄 [green]Fresh render[/green]"
+
         if format == 'markdown':
             # Render markdown beautifully in CLI
             display_panel = Panel.fit(
                 f"📄 [bold cyan]Rendered Report:[/bold cyan] {file_path.name}\n"
-                f"🗓️  Date range: [bold]{report.date_range.start} to {report.date_range.end}[/bold]",
+                f"🗓️  Date range: [bold]{source_report.date_range.start} to {source_report.date_range.end}[/bold]\n"
+                f"📦 Status: {cache_status}",
                 title="📖 Markdown Report",
                 border_style="cyan"
             )
@@ -731,7 +767,8 @@ def render_command(file_path_str: str, output: Optional[str], format: str, inter
             # Show JSON with syntax highlighting
             display_panel = Panel.fit(
                 f"📄 [bold cyan]Rendered Report:[/bold cyan] {file_path.name}\n"
-                f"🗓️  Date range: [bold]{report.date_range.start} to {report.date_range.end}[/bold]",
+                f"🗓️  Date range: [bold]{source_report.date_range.start} to {source_report.date_range.end}[/bold]\n"
+                f"📦 Status: {cache_status}",
                 title="📊 JSON Report",
                 border_style="cyan"
             )
@@ -747,7 +784,8 @@ def render_command(file_path_str: str, output: Optional[str], format: str, inter
             # For HTML, show a sample and suggest saving to file
             display_panel = Panel.fit(
                 f"📄 [bold cyan]Rendered Report:[/bold cyan] {file_path.name}\n"
-                f"🗓️  Date range: [bold]{report.date_range.start} to {report.date_range.end}[/bold]\n\n"
+                f"🗓️  Date range: [bold]{source_report.date_range.start} to {source_report.date_range.end}[/bold]\n"
+                f"📦 Status: {cache_status}\n\n"
                 f"💡 [yellow]HTML is best viewed in a browser.[/yellow]\n"
                 f"Consider using [bold]--output filename.html[/bold] to save it.",
                 title="🌐 HTML Report",
