@@ -63,6 +63,19 @@ def parse_timeframe(timeframe: str) -> Optional[DateRange]:
         last_sunday = last_monday + timedelta(days=6)
         return DateRange(start=last_monday, end=last_sunday)
 
+    elif timeframe == 'this-month':
+        # First day of current month to today
+        first_day = today.replace(day=1)
+        return DateRange(start=first_day, end=today)
+
+    elif timeframe == 'last-month':
+        # First day to last day of previous month
+        # Get first day of current month, then subtract 1 day to get last month
+        first_day_this_month = today.replace(day=1)
+        last_day_last_month = first_day_this_month - timedelta(days=1)
+        first_day_last_month = last_day_last_month.replace(day=1)
+        return DateRange(start=first_day_last_month, end=last_day_last_month)
+
     else:
         # Try to parse as MM-DD or MM-DD-YY
         try:
@@ -130,6 +143,8 @@ def cli(timeframe, output, format, no_calendar, no_claude, interactive, display,
       receipts                 # Last week's receipts (default)
       receipts this-week       # This week so far
       receipts last-week       # Last week
+      receipts this-month      # This month so far
+      receipts last-month      # Last month (complete)
       receipts today          # Today's receipts
       receipts yesterday      # Yesterday's receipts
       receipts 03-25          # Specific date (MM-DD)
@@ -183,14 +198,18 @@ def cli(timeframe, output, format, no_calendar, no_claude, interactive, display,
     date_range = parse_timeframe(timeframe)
     if not date_range:
         console.print(f"❌ Invalid timeframe: {timeframe}", style="red")
-        console.print("💡 Use: today, yesterday, this-week, last-week, MM-DD, or MM-DD-YY", style="yellow")
+        console.print("💡 Use: today, yesterday, this-week, last-week, this-month, last-month, MM-DD, or MM-DD-YY", style="yellow")
         raise click.Abort()
 
-    # Determine if this is a daily or weekly report
+    # Determine report type: daily, weekly, or monthly
     is_daily = date_range.start == date_range.end
+    duration_days = (date_range.end - date_range.start).days + 1
+    is_monthly = duration_days > 14  # More than 2 weeks, treat as monthly
 
     if is_daily:
         generate_daily_report(date_range, output, format, no_calendar, no_claude, interactive, display)
+    elif is_monthly:
+        generate_monthly_report(date_range, output, format, no_calendar, no_claude, interactive, display, timeframe)
     else:
         generate_weekly_report(date_range, output, format, no_calendar, no_claude, interactive, display)
 
@@ -206,15 +225,100 @@ def generate_daily_report(date_range: DateRange, output, format, no_calendar, no
         console.print("💡 Run: receipts setup", style="yellow")
         raise click.Abort()
 
-    # Override config with command line options
-    if no_calendar:
-        config.enable_calendar = False
-    if no_claude:
-        config.enable_claude_tracking = False
-
     target_date = date_range.start
     date_name = "today" if target_date == date.today() else "yesterday" if target_date == date.today() - timedelta(days=1) else target_date.strftime("%Y-%m-%d")
 
+    # For display mode, look for existing cached report files
+    if display:
+        reports_dir = Path(config.output_dir)
+
+        # Try different possible filenames for this date
+        possible_files = []
+        if date_name == "today":
+            possible_files.extend([
+                reports_dir / f"today-{target_date}.{format}",
+                reports_dir / f"daily-{target_date}.{format}"
+            ])
+        elif date_name == "yesterday":
+            possible_files.extend([
+                reports_dir / f"yesterday-{target_date}.{format}",
+                reports_dir / f"daily-{target_date}.{format}"
+            ])
+        else:
+            possible_files.append(reports_dir / f"daily-{target_date}.{format}")
+
+        # Look for existing report
+        existing_report = None
+        for possible_file in possible_files:
+            if possible_file.exists():
+                existing_report = possible_file
+                break
+
+        if existing_report:
+            console.print(f"📄 Found cached report: [bold]{existing_report}[/bold]")
+            console.print(f"📺 Displaying {date_name}'s receipts for: [bold]{target_date}[/bold]")
+
+            # Read and display the cached report
+            try:
+                cached_content = existing_report.read_text(encoding='utf-8')
+
+                console.print()
+                if format == 'markdown':
+                    display_panel = Panel.fit(
+                        f"📄 [bold cyan]{date_name.title()}'s Report:[/bold cyan] (Cached)\n"
+                        f"🗓️  Date: [bold]{target_date}[/bold]",
+                        title="📖 Cached Report",
+                        border_style="yellow"
+                    )
+                    console.print(display_panel)
+                    console.print()
+                    console.print(Markdown(cached_content))
+
+                elif format == 'json':
+                    display_panel = Panel.fit(
+                        f"📄 [bold cyan]{date_name.title()}'s Report:[/bold cyan] (Cached)\n"
+                        f"🗓️  Date: [bold]{target_date}[/bold]",
+                        title="📊 Cached Report (JSON)",
+                        border_style="yellow"
+                    )
+                    console.print(display_panel)
+                    console.print()
+                    from rich.syntax import Syntax
+                    syntax = Syntax(cached_content, "json", theme="monokai", line_numbers=True)
+                    console.print(syntax)
+
+                elif format == 'html':
+                    display_panel = Panel.fit(
+                        f"📄 [bold cyan]{date_name.title()}'s Report:[/bold cyan] (Cached)\n"
+                        f"🗓️  Date: [bold]{target_date}[/bold]\n\n"
+                        f"💡 [yellow]HTML is best viewed in a browser.[/yellow]",
+                        title="🌐 Cached Report (HTML)",
+                        border_style="yellow"
+                    )
+                    console.print(display_panel)
+                    console.print()
+                    preview = cached_content[:1000] + "\n..." if len(cached_content) > 1000 else cached_content
+                    from rich.syntax import Syntax
+                    syntax = Syntax(preview, "html", theme="monokai", line_numbers=True)
+                    console.print(syntax)
+
+                console.print()
+                console.print("✨ [green]Cached report display complete![/green]")
+                return
+
+            except Exception as e:
+                console.print(f"❌ [red]Could not read cached report:[/red] {e}")
+                raise click.Abort()
+        else:
+            # No cached report found
+            console.print(f"❌ [red]No cached {format} report found for {date_name} ({target_date})[/red]")
+            console.print()
+            console.print("💡 [yellow]Generate a report first:[/yellow]")
+            console.print(f"  receipts {date_name} --format {format}")
+            console.print(f"  receipts {date_name} --format {format} --output my-report.{format}")
+            raise click.Abort()
+
+    # File mode - continue with normal generation
     console.print(f"📅 Generating {date_name}'s receipts for: [bold]{target_date}[/bold]")
     console.print(f"👤 GitHub user: [bold cyan]{config.github_username}[/bold cyan]")
 
@@ -373,6 +477,100 @@ def generate_weekly_report(date_range: DateRange, output, format, no_calendar, n
         console.print("💡 Run: receipts setup", style="yellow")
         raise click.Abort()
 
+    # For display mode, look for existing cached report files
+    if display:
+        reports_dir = Path(config.output_dir)
+        week_num = date_range.start.isocalendar()[1]
+        year = date_range.start.year
+
+        # Try different possible filenames for this week
+        today = date.today()
+        days_since_monday = today.weekday()
+        this_monday = today - timedelta(days=days_since_monday)
+
+        possible_files = []
+        if date_range.start == this_monday and date_range.end >= today:
+            # This week (partial)
+            possible_files.append(reports_dir / f"this-week-{year}-W{week_num:02d}.{format}")
+        else:
+            # Complete week or last week
+            possible_files.append(reports_dir / f"review-{year}-W{week_num:02d}.{format}")
+
+        # Also try generic weekly naming
+        possible_files.append(reports_dir / f"weekly-{year}-W{week_num:02d}.{format}")
+
+        # Look for existing report
+        existing_report = None
+        for possible_file in possible_files:
+            if possible_file.exists():
+                existing_report = possible_file
+                break
+
+        if existing_report:
+            console.print(f"📄 Found cached report: [bold]{existing_report}[/bold]")
+            console.print(f"📺 Displaying weekly report for: [bold]{date_range.start}[/bold] to [bold]{date_range.end}[/bold]")
+
+            # Read and display the cached report
+            try:
+                cached_content = existing_report.read_text(encoding='utf-8')
+
+                console.print()
+                if format == 'markdown':
+                    display_panel = Panel.fit(
+                        f"📄 [bold cyan]Weekly Report:[/bold cyan] (Cached)\n"
+                        f"🗓️  Period: [bold]{date_range.start} to {date_range.end}[/bold]",
+                        title="📖 Cached Report",
+                        border_style="yellow"
+                    )
+                    console.print(display_panel)
+                    console.print()
+                    console.print(Markdown(cached_content))
+
+                elif format == 'json':
+                    display_panel = Panel.fit(
+                        f"📄 [bold cyan]Weekly Report:[/bold cyan] (Cached)\n"
+                        f"🗓️  Period: [bold]{date_range.start} to {date_range.end}[/bold]",
+                        title="📊 Cached Report (JSON)",
+                        border_style="yellow"
+                    )
+                    console.print(display_panel)
+                    console.print()
+                    from rich.syntax import Syntax
+                    syntax = Syntax(cached_content, "json", theme="monokai", line_numbers=True)
+                    console.print(syntax)
+
+                elif format == 'html':
+                    display_panel = Panel.fit(
+                        f"📄 [bold cyan]Weekly Report:[/bold cyan] (Cached)\n"
+                        f"🗓️  Period: [bold]{date_range.start} to {date_range.end}[/bold]\n\n"
+                        f"💡 [yellow]HTML is best viewed in a browser.[/yellow]",
+                        title="🌐 Cached Report (HTML)",
+                        border_style="yellow"
+                    )
+                    console.print(display_panel)
+                    console.print()
+                    preview = cached_content[:1000] + "\n..." if len(cached_content) > 1000 else cached_content
+                    from rich.syntax import Syntax
+                    syntax = Syntax(preview, "html", theme="monokai", line_numbers=True)
+                    console.print(syntax)
+
+                console.print()
+                console.print("✨ [green]Cached report display complete![/green]")
+                return
+
+            except Exception as e:
+                console.print(f"❌ [red]Could not read cached report:[/red] {e}")
+                raise click.Abort()
+        else:
+            # No cached report found
+            console.print(f"❌ [red]No cached {format} report found for week {year}-W{week_num:02d}[/red]")
+            console.print()
+            console.print("💡 [yellow]Generate a report first:[/yellow]")
+            console.print(f"  receipts last-week --format {format}")
+            console.print(f"  receipts this-week --format {format}")
+            raise click.Abort()
+
+    # File mode - continue with normal generation
     # Override config with command line options
     if no_calendar:
         config.enable_calendar = False
@@ -526,6 +724,177 @@ def generate_weekly_report(date_range: DateRange, output, format, no_calendar, n
         if interactive and format == 'markdown':
             console.print("\n📖 [bold]Preview:[/bold]")
             preview = report[:1000] + "..." if len(report) > 1000 else report
+            console.print(Markdown(preview))
+
+        # Offer to open file
+        if interactive:
+            if click.confirm("🔍 Open the report file?"):
+                os.system(f"code '{output}'" if os.system("which code > /dev/null 2>&1") == 0 else f"cat '{output}'")
+
+
+def generate_monthly_report(date_range: DateRange, output, format, no_calendar, no_claude, interactive, display: bool = False, timeframe: str = ""):
+    """Generate a monthly review report"""
+
+    # Load configuration
+    try:
+        config = load_config()
+    except Exception as e:
+        console.print(f"❌ Configuration error: {e}", style="red")
+        console.print("💡 Run: receipts setup", style="yellow")
+        raise click.Abort()
+
+    # Override config with command line options
+    if no_calendar:
+        config.enable_calendar = False
+    if no_claude:
+        config.enable_claude_tracking = False
+
+    console.print(f"📅 Generating monthly report for: [bold]{date_range.start}[/bold] to [bold]{date_range.end}[/bold]")
+    console.print(f"👤 GitHub user: [bold cyan]{config.github_username}[/bold cyan]")
+
+    if interactive:
+        if not click.confirm("🤔 Continue with these settings?"):
+            raise click.Abort()
+
+    # Initialize generator
+    generator = WeeklyReviewGenerator(config)
+
+    # Show progress with beautiful spinner
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+        transient=True,
+    ) as progress:
+
+        # Fetch GitHub data
+        task1 = progress.add_task("🔍 Fetching GitHub contributions...", total=None)
+        contributions = generator.fetch_github_contributions(date_range)
+        progress.update(task1, description="✅ GitHub contributions fetched")
+
+        task2 = progress.add_task("📝 Fetching PRs and issues...", total=None)
+        prs_issues = generator.fetch_prs_and_issues(date_range)
+        progress.update(task2, description="✅ PRs and issues fetched")
+
+        if config.enable_calendar:
+            task3 = progress.add_task("📅 Fetching calendar events...", total=None)
+            calendar_data = generator.fetch_calendar_events(date_range)
+            progress.update(task3, description="✅ Calendar events fetched")
+        else:
+            calendar_data = None
+
+        if config.enable_claude_tracking:
+            task4 = progress.add_task("🤖 Analyzing Claude activity...", total=None)
+            claude_data = generator.estimate_claude_activity(date_range)
+            progress.update(task4, description="✅ Claude activity analyzed")
+        else:
+            claude_data = None
+
+        task5 = progress.add_task("📊 Generating monthly report...", total=None)
+        report = generator.generate_report(
+            date_range=date_range,
+            contributions=contributions,
+            prs_issues=prs_issues,
+            calendar_data=calendar_data,
+            claude_data=claude_data,
+            output_format=format
+        )
+        progress.update(task5, description="✅ Monthly report generated")
+
+    if display:
+        # Display mode - show content in CLI
+        console.print()
+
+        if format == 'markdown':
+            # Render markdown beautifully in CLI
+            display_panel = Panel.fit(
+                f"📄 [bold cyan]Monthly Report:[/bold cyan]\n"
+                f"🗓️  Period: [bold]{date_range.start} to {date_range.end}[/bold]",
+                title="📖 Generated Report",
+                border_style="cyan"
+            )
+            console.print(display_panel)
+            console.print()
+            console.print(Markdown(report))
+
+        elif format == 'json':
+            # Show JSON with syntax highlighting
+            display_panel = Panel.fit(
+                f"📄 [bold cyan]Monthly Report:[/bold cyan]\n"
+                f"🗓️  Period: [bold]{date_range.start} to {date_range.end}[/bold]",
+                title="📊 Generated Report (JSON)",
+                border_style="cyan"
+            )
+            console.print(display_panel)
+            console.print()
+
+            # Use Rich's JSON syntax highlighting
+            from rich.syntax import Syntax
+            syntax = Syntax(report, "json", theme="monokai", line_numbers=True)
+            console.print(syntax)
+
+        elif format == 'html':
+            # For HTML, show a sample and suggest saving to file
+            display_panel = Panel.fit(
+                f"📄 [bold cyan]Monthly Report:[/bold cyan]\n"
+                f"🗓️  Period: [bold]{date_range.start} to {date_range.end}[/bold]\n\n"
+                f"💡 [yellow]HTML is best viewed in a browser.[/yellow]\n"
+                f"Consider saving with [bold]--output filename.html[/bold].",
+                title="🌐 Generated Report (HTML)",
+                border_style="cyan"
+            )
+            console.print(display_panel)
+            console.print()
+
+            # Show first part of HTML
+            preview = report[:1000] + "\n..." if len(report) > 1000 else report
+            from rich.syntax import Syntax
+            syntax = Syntax(preview, "html", theme="monokai", line_numbers=True)
+            console.print(syntax)
+
+        console.print()
+        console.print("✨ [green]Report display complete![/green]")
+
+    else:
+        # File mode - save to file
+        if not output:
+            month = date_range.start.month
+            year = date_range.start.year
+            reports_dir = Path(config.output_dir)
+            reports_dir.mkdir(exist_ok=True)
+
+            # Different naming based on month type
+            today = date.today()
+            first_day_this_month = today.replace(day=1)
+
+            if date_range.start == first_day_this_month:
+                # This month (partial)
+                output = reports_dir / f"this-month-{year}-{month:02d}.{format}"
+            else:
+                # Complete month or last month
+                output = reports_dir / f"monthly-{year}-{month:02d}.{format}"
+        else:
+            output = Path(output)
+
+        # Save report
+        output.write_text(report, encoding='utf-8')
+
+        # Show success message
+        console.print()
+        success_panel = Panel.fit(
+            f"✅ [bold green]Monthly report generated successfully![/bold green]\n\n"
+            f"📁 File: [bold]{output}[/bold]\n"
+            f"📊 Format: [bold]{format.upper()}[/bold]\n"
+            f"🗓️  Period: [bold]{date_range.start} to {date_range.end}[/bold]",
+            title="🎉 Success",
+            border_style="green"
+        )
+        console.print(success_panel)
+
+        # Show preview if interactive
+        if interactive and format == 'markdown':
+            console.print("\n📖 [bold]Preview:[/bold]")
+            preview = report[:800] + "..." if len(report) > 800 else report
             console.print(Markdown(preview))
 
         # Offer to open file
