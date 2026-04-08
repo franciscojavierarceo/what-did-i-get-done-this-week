@@ -59,8 +59,8 @@ class MarkdownFormatter(ReportFormatter):
                     lines.append(f"- **{meeting_item}**")
             lines.append("")
 
-        # AI-Assisted Development
-        lines.append("### 🤖 **AI-Assisted Development**")
+        # Vibe Engineering
+        lines.append("### 🤖 **Vibe Engineering**")
         lines.append("- **Claude sessions** estimated for development work")
         lines.append("  - Sessions focused on implementation and problem-solving")
         lines.append("  - AI-assisted code reviews and architectural decisions")

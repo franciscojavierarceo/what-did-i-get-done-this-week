@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "what-did-i-get-done-this-week"
-version = "0.1.1"
+version = "0.2.0"
 description = "A beautiful CLI tool to track your weekly accomplishments and generate professional accountability reports"
 readme = "README.md"
 license = "MIT"
