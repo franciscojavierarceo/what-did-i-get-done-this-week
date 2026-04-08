@@ -3,6 +3,7 @@ Beautiful CLI interface for "What Did I Get Done This Week?"
 """
 
 import click
+import re
 from datetime import date, timedelta
 from typing import Optional
 from rich.console import Console
@@ -20,8 +21,17 @@ from .config import load_config, setup_config
 from .models import DateRange, OutputFormat
 from .readers import read_report
 from .formatters import MarkdownFormatter, HTMLFormatter, JSONFormatter
+from . import __version__
 
 console = Console()
+
+REFLECTION_QUESTIONS = [
+    ("What could I have done better?", "### What could I have done better?"),
+    ("What is important that I am missing?", "### What is important that I am missing?"),
+    ("Am I doing work that is aligned with my goals?", "### Am I doing work that is aligned with my goals?"),
+    ("How do I feel?", "### How do I feel?"),
+]
+REFLECTION_PLACEHOLDER = "*[Add your thoughts]*"
 
 
 def print_banner():
@@ -125,6 +135,7 @@ def get_week_dates(start_date: str = None) -> DateRange:
 
 @click.command()
 @click.argument('timeframe', required=False, default='last-week')
+@click.argument('sub_timeframe', required=False, default=None)
 @click.option('--output', '-o', type=click.Path(), help='Output file (auto-generated if not specified)')
 @click.option('--format', '-f', type=click.Choice(['markdown', 'html', 'json']), default='markdown', help='Output format')
 @click.option('--no-calendar', is_flag=True, help='Skip calendar integration')
@@ -133,13 +144,15 @@ def get_week_dates(start_date: str = None) -> DateRange:
 @click.option('--display', '-d', is_flag=True, help='Display rendered report in CLI instead of saving to file')
 @click.option('--no-display', is_flag=True, help='Skip displaying generated report (save to file only)')
 @click.option('--force', is_flag=True, help='Force regeneration even if cached output exists')
-@click.version_option()
-def cli(timeframe, output, format, no_calendar, no_claude, interactive, display, no_display, force):
-    """🎯 What Did I Get Done This Week? v0.1.1
+@click.option('--reflect', '-r', is_flag=True, help='Prompt for reflections after generating report')
+@click.version_option(version=__version__)
+def cli(timeframe, sub_timeframe, output, format, no_calendar, no_claude, interactive, display, no_display, force, reflect):
+    """🎯 What Did I Get Done This Week? v0.3.0
 
     Got the receipts on your productivity! A beautiful CLI tool for tracking
     your daily and weekly accomplishments.
 
+    \b
     Usage:
       receipts                 # Last week's receipts (default)
       receipts this-week       # This week so far
@@ -151,18 +164,29 @@ def cli(timeframe, output, format, no_calendar, no_claude, interactive, display,
       receipts 03-25          # Specific date (MM-DD)
       receipts 03-25-24       # Specific date (MM-DD-YY)
 
+    \b
     Render existing reports:
       receipts report.json --format html --display    # Show HTML in CLI
       receipts report.md --format markdown --display  # Show Markdown in CLI
       receipts report.json --format html --output presentation.html  # Save to file
 
+    \b
     Generate and display:
       receipts last-week                              # Generate and show in CLI (default)
       receipts today --format json                   # Generate JSON and show (default)
       receipts this-week --no-display                # Generate only, skip display
       receipts last-week --display                   # Show cached report only
 
-    Setup:
+    \b
+    Reflect:
+      receipts reflect             # Reflect on last week's report
+      receipts reflect yesterday   # Reflect on yesterday's report
+      receipts reflect this-week   # Reflect on this week's report
+      receipts today reflect       # Reflect on today's report
+
+    \b
+    Manage:
+      receipts list           # Show all generated reports
       receipts setup          # First-time configuration
       receipts status         # Check current setup
     """
@@ -176,6 +200,15 @@ def cli(timeframe, output, format, no_calendar, no_claude, interactive, display,
         return
     elif timeframe == 'status':
         status_command()
+        return
+    elif timeframe == 'list':
+        list_command()
+        return
+    elif timeframe == 'reflect':
+        reflect_command(sub_timeframe)
+        return
+    elif sub_timeframe == 'reflect':
+        reflect_command(timeframe)
         return
     elif timeframe == 'render':
         # For render command, we need to show usage since file path is required
@@ -209,14 +242,14 @@ def cli(timeframe, output, format, no_calendar, no_claude, interactive, display,
     is_monthly = duration_days > 14  # More than 2 weeks, treat as monthly
 
     if is_daily:
-        generate_daily_report(date_range, output, format, no_calendar, no_claude, interactive, display, no_display)
+        generate_daily_report(date_range, output, format, no_calendar, no_claude, interactive, display, no_display, reflect, force)
     elif is_monthly:
-        generate_monthly_report(date_range, output, format, no_calendar, no_claude, interactive, display, no_display, timeframe)
+        generate_monthly_report(date_range, output, format, no_calendar, no_claude, interactive, display, no_display, timeframe, reflect, force)
     else:
-        generate_weekly_report(date_range, output, format, no_calendar, no_claude, interactive, display, no_display)
+        generate_weekly_report(date_range, output, format, no_calendar, no_claude, interactive, display, no_display, reflect, force)
 
 
-def generate_daily_report(date_range: DateRange, output, format, no_calendar, no_claude, interactive, display: bool = False, no_display: bool = False):
+def generate_daily_report(date_range: DateRange, output, format, no_calendar, no_claude, interactive, display: bool = False, no_display: bool = False, reflect: bool = False, force: bool = False):
     """Generate a daily review report"""
 
     # Load configuration
@@ -321,57 +354,80 @@ def generate_daily_report(date_range: DateRange, output, format, no_calendar, no
             raise click.Abort()
 
     # File mode - continue with normal generation
-    console.print(f"📅 Generating {date_name}'s receipts for: [bold]{target_date}[/bold]")
-    console.print(f"👤 GitHub user: [bold cyan]{config.github_username}[/bold cyan]")
 
-    if interactive:
-        if not click.confirm("🤔 Continue with these settings?"):
-            raise click.Abort()
-
-    # Initialize generator
-    generator = WeeklyReviewGenerator(config)
-
-    # Show progress with beautiful spinner
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-        transient=True,
-    ) as progress:
-
-        # Fetch GitHub data
-        task1 = progress.add_task(f"🔍 Fetching {date_name}'s GitHub activity...", total=None)
-        contributions = generator.fetch_github_contributions(date_range)
-        progress.update(task1, description="✅ GitHub activity fetched")
-
-        task2 = progress.add_task(f"📝 Fetching {date_name}'s PRs and issues...", total=None)
-        prs_issues = generator.fetch_prs_and_issues(date_range)
-        progress.update(task2, description="✅ PRs and issues fetched")
-
-        if config.enable_calendar:
-            task3 = progress.add_task(f"📅 Fetching {date_name}'s meetings...", total=None)
-            calendar_data = generator.fetch_calendar_events(date_range)
-            progress.update(task3, description="✅ Calendar events fetched")
+    # Determine output path early for cache check
+    if not output:
+        reports_dir = Path(config.output_dir)
+        reports_dir.mkdir(exist_ok=True)
+        if date_name == "today":
+            output = reports_dir / f"today-{target_date}.{format}"
+        elif date_name == "yesterday":
+            output = reports_dir / f"yesterday-{target_date}.{format}"
         else:
-            calendar_data = None
+            output = reports_dir / f"daily-{target_date}.{format}"
+    else:
+        output = Path(output)
 
-        if config.enable_claude_tracking:
-            task4 = progress.add_task(f"🤖 Analyzing {date_name}'s Claude activity...", total=None)
-            claude_data = generator.estimate_claude_activity(date_range)
-            progress.update(task4, description="✅ Claude activity analyzed")
-        else:
-            claude_data = None
+    # Check for cached report
+    if not force and output.exists():
+        console.print(f"⚡ [yellow]Using cached report:[/yellow] {output}")
+        console.print(f"💡 [dim]Use --force to regenerate[/dim]")
+        report = output.read_text(encoding='utf-8')
+    else:
+        console.print(f"📅 Generating {date_name}'s receipts for: [bold]{target_date}[/bold]")
+        console.print(f"👤 GitHub user: [bold cyan]{config.github_username}[/bold cyan]")
 
-        task5 = progress.add_task(f"📊 Generating {date_name}'s receipts...", total=None)
-        report = generator.generate_report(
-            date_range=date_range,
-            contributions=contributions,
-            prs_issues=prs_issues,
-            calendar_data=calendar_data,
-            claude_data=claude_data,
-            output_format=format
-        )
-        progress.update(task5, description="✅ Receipts generated")
+        if interactive:
+            if not click.confirm("🤔 Continue with these settings?"):
+                raise click.Abort()
+
+        # Initialize generator
+        generator = WeeklyReviewGenerator(config)
+
+        # Show progress with beautiful spinner
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+            transient=True,
+        ) as progress:
+
+            # Fetch GitHub data
+            task1 = progress.add_task(f"🔍 Fetching {date_name}'s GitHub activity...", total=None)
+            contributions = generator.fetch_github_contributions(date_range)
+            progress.update(task1, description="✅ GitHub activity fetched")
+
+            task2 = progress.add_task(f"📝 Fetching {date_name}'s PRs and issues...", total=None)
+            prs_issues = generator.fetch_prs_and_issues(date_range)
+            progress.update(task2, description="✅ PRs and issues fetched")
+
+            if config.enable_calendar:
+                task3 = progress.add_task(f"📅 Fetching {date_name}'s meetings...", total=None)
+                calendar_data = generator.fetch_calendar_events(date_range)
+                progress.update(task3, description="✅ Calendar events fetched")
+            else:
+                calendar_data = None
+
+            if config.enable_claude_tracking:
+                task4 = progress.add_task(f"🤖 Analyzing {date_name}'s Claude activity...", total=None)
+                claude_data = generator.estimate_claude_activity(date_range)
+                progress.update(task4, description="✅ Claude activity analyzed")
+            else:
+                claude_data = None
+
+            task5 = progress.add_task(f"📊 Generating {date_name}'s receipts...", total=None)
+            report = generator.generate_report(
+                date_range=date_range,
+                contributions=contributions,
+                prs_issues=prs_issues,
+                calendar_data=calendar_data,
+                claude_data=claude_data,
+                output_format=format
+            )
+            progress.update(task5, description="✅ Receipts generated")
+
+        # Save report
+        output.write_text(report, encoding='utf-8')
 
     if display:
         # Display mode - show content in CLI
@@ -428,22 +484,6 @@ def generate_daily_report(date_range: DateRange, output, format, no_calendar, no
         console.print("✨ [green]Report display complete![/green]")
 
     else:
-        # File mode - save to file (existing logic)
-        if not output:
-            reports_dir = Path(config.output_dir)
-            reports_dir.mkdir(exist_ok=True)
-            if date_name == "today":
-                output = reports_dir / f"today-{target_date}.{format}"
-            elif date_name == "yesterday":
-                output = reports_dir / f"yesterday-{target_date}.{format}"
-            else:
-                output = reports_dir / f"daily-{target_date}.{format}"
-        else:
-            output = Path(output)
-
-        # Save report
-        output.write_text(report, encoding='utf-8')
-
         # Show success message
         console.print()
         success_panel = Panel.fit(
@@ -455,6 +495,13 @@ def generate_daily_report(date_range: DateRange, output, format, no_calendar, no
             border_style="green"
         )
         console.print(success_panel)
+
+        # Handle --reflect flag
+        if reflect:
+            if format == 'markdown':
+                fill_reflections(output)
+            else:
+                console.print("⚠️  [yellow]Reflections only work with markdown format. Use --format markdown --reflect[/yellow]")
 
         # Auto-display by default (unless --no-display is used)
         if not no_display:
@@ -513,7 +560,7 @@ def generate_daily_report(date_range: DateRange, output, format, no_calendar, no
                 os.system(f"code '{output}'" if os.system("which code > /dev/null 2>&1") == 0 else f"cat '{output}'")
 
 
-def generate_weekly_report(date_range: DateRange, output, format, no_calendar, no_claude, interactive, display: bool = False, no_display: bool = False):
+def generate_weekly_report(date_range: DateRange, output, format, no_calendar, no_claude, interactive, display: bool = False, no_display: bool = False, reflect: bool = False, force: bool = False):
     """Generate a weekly review report"""
 
     # Load configuration
@@ -624,57 +671,85 @@ def generate_weekly_report(date_range: DateRange, output, format, no_calendar, n
     if no_claude:
         config.enable_claude_tracking = False
 
-    console.print(f"📅 Generating report for: [bold]{date_range.start}[/bold] to [bold]{date_range.end}[/bold]")
-    console.print(f"👤 GitHub user: [bold cyan]{config.github_username}[/bold cyan]")
+    # Determine output path early for cache check
+    if not output:
+        week_num = date_range.start.isocalendar()[1]
+        year = date_range.start.year
+        reports_dir = Path(config.output_dir)
+        reports_dir.mkdir(exist_ok=True)
 
-    if interactive:
-        if not click.confirm("🤔 Continue with these settings?"):
-            raise click.Abort()
+        # Different naming based on week type
+        today = date.today()
+        days_since_monday = today.weekday()
+        this_monday = today - timedelta(days=days_since_monday)
 
-    # Initialize generator
-    generator = WeeklyReviewGenerator(config)
-
-    # Show progress with beautiful spinner
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-        transient=True,
-    ) as progress:
-
-        # Fetch GitHub data
-        task1 = progress.add_task("🔍 Fetching GitHub contributions...", total=None)
-        contributions = generator.fetch_github_contributions(date_range)
-        progress.update(task1, description="✅ GitHub contributions fetched")
-
-        task2 = progress.add_task("📝 Fetching PRs and issues...", total=None)
-        prs_issues = generator.fetch_prs_and_issues(date_range)
-        progress.update(task2, description="✅ PRs and issues fetched")
-
-        if config.enable_calendar:
-            task3 = progress.add_task("📅 Fetching calendar events...", total=None)
-            calendar_data = generator.fetch_calendar_events(date_range)
-            progress.update(task3, description="✅ Calendar events fetched")
+        if date_range.start == this_monday and date_range.end >= today:
+            output = reports_dir / f"this-week-{year}-W{week_num:02d}.{format}"
         else:
-            calendar_data = None
+            output = reports_dir / f"review-{year}-W{week_num:02d}.{format}"
+    else:
+        output = Path(output)
 
-        if config.enable_claude_tracking:
-            task4 = progress.add_task("🤖 Analyzing Claude activity...", total=None)
-            claude_data = generator.estimate_claude_activity(date_range)
-            progress.update(task4, description="✅ Claude activity analyzed")
-        else:
-            claude_data = None
+    # Check for cached report
+    if not force and output.exists():
+        console.print(f"⚡ [yellow]Using cached report:[/yellow] {output}")
+        console.print(f"💡 [dim]Use --force to regenerate[/dim]")
+        report = output.read_text(encoding='utf-8')
+    else:
+        console.print(f"📅 Generating report for: [bold]{date_range.start}[/bold] to [bold]{date_range.end}[/bold]")
+        console.print(f"👤 GitHub user: [bold cyan]{config.github_username}[/bold cyan]")
 
-        task5 = progress.add_task("📊 Generating report...", total=None)
-        report = generator.generate_report(
-            date_range=date_range,
-            contributions=contributions,
-            prs_issues=prs_issues,
-            calendar_data=calendar_data,
-            claude_data=claude_data,
-            output_format=format
-        )
-        progress.update(task5, description="✅ Report generated")
+        if interactive:
+            if not click.confirm("🤔 Continue with these settings?"):
+                raise click.Abort()
+
+        # Initialize generator
+        generator = WeeklyReviewGenerator(config)
+
+        # Show progress with beautiful spinner
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+            transient=True,
+        ) as progress:
+
+            # Fetch GitHub data
+            task1 = progress.add_task("🔍 Fetching GitHub contributions...", total=None)
+            contributions = generator.fetch_github_contributions(date_range)
+            progress.update(task1, description="✅ GitHub contributions fetched")
+
+            task2 = progress.add_task("📝 Fetching PRs and issues...", total=None)
+            prs_issues = generator.fetch_prs_and_issues(date_range)
+            progress.update(task2, description="✅ PRs and issues fetched")
+
+            if config.enable_calendar:
+                task3 = progress.add_task("📅 Fetching calendar events...", total=None)
+                calendar_data = generator.fetch_calendar_events(date_range)
+                progress.update(task3, description="✅ Calendar events fetched")
+            else:
+                calendar_data = None
+
+            if config.enable_claude_tracking:
+                task4 = progress.add_task("🤖 Analyzing Claude activity...", total=None)
+                claude_data = generator.estimate_claude_activity(date_range)
+                progress.update(task4, description="✅ Claude activity analyzed")
+            else:
+                claude_data = None
+
+            task5 = progress.add_task("📊 Generating report...", total=None)
+            report = generator.generate_report(
+                date_range=date_range,
+                contributions=contributions,
+                prs_issues=prs_issues,
+                calendar_data=calendar_data,
+                claude_data=claude_data,
+                output_format=format
+            )
+            progress.update(task5, description="✅ Report generated")
+
+        # Save report
+        output.write_text(report, encoding='utf-8')
 
     if display:
         # Display mode - show content in CLI
@@ -731,30 +806,6 @@ def generate_weekly_report(date_range: DateRange, output, format, no_calendar, n
         console.print("✨ [green]Report display complete![/green]")
 
     else:
-        # File mode - save to file (existing logic)
-        if not output:
-            week_num = date_range.start.isocalendar()[1]
-            year = date_range.start.year
-            reports_dir = Path(config.output_dir)
-            reports_dir.mkdir(exist_ok=True)
-
-            # Different naming based on week type
-            today = date.today()
-            days_since_monday = today.weekday()
-            this_monday = today - timedelta(days=days_since_monday)
-
-            if date_range.start == this_monday and date_range.end >= today:
-                # This week (partial)
-                output = reports_dir / f"this-week-{year}-W{week_num:02d}.{format}"
-            else:
-                # Complete week or last week
-                output = reports_dir / f"review-{year}-W{week_num:02d}.{format}"
-        else:
-            output = Path(output)
-
-        # Save report
-        output.write_text(report, encoding='utf-8')
-
         # Show success message
         console.print()
         success_panel = Panel.fit(
@@ -766,6 +817,13 @@ def generate_weekly_report(date_range: DateRange, output, format, no_calendar, n
             border_style="green"
         )
         console.print(success_panel)
+
+        # Handle --reflect flag
+        if reflect:
+            if format == 'markdown':
+                fill_reflections(output)
+            else:
+                console.print("⚠️  [yellow]Reflections only work with markdown format. Use --format markdown --reflect[/yellow]")
 
         # Auto-display by default (unless --no-display is used)
         if not no_display:
@@ -824,7 +882,7 @@ def generate_weekly_report(date_range: DateRange, output, format, no_calendar, n
                 os.system(f"code '{output}'" if os.system("which code > /dev/null 2>&1") == 0 else f"cat '{output}'")
 
 
-def generate_monthly_report(date_range: DateRange, output, format, no_calendar, no_claude, interactive, display: bool = False, no_display: bool = False, timeframe: str = ""):
+def generate_monthly_report(date_range: DateRange, output, format, no_calendar, no_claude, interactive, display: bool = False, no_display: bool = False, timeframe: str = "", reflect: bool = False, force: bool = False):
     """Generate a monthly review report"""
 
     # Load configuration
@@ -841,57 +899,83 @@ def generate_monthly_report(date_range: DateRange, output, format, no_calendar, 
     if no_claude:
         config.enable_claude_tracking = False
 
-    console.print(f"📅 Generating monthly report for: [bold]{date_range.start}[/bold] to [bold]{date_range.end}[/bold]")
-    console.print(f"👤 GitHub user: [bold cyan]{config.github_username}[/bold cyan]")
+    # Determine output path early for cache check
+    if not output:
+        month = date_range.start.month
+        year = date_range.start.year
+        reports_dir = Path(config.output_dir)
+        reports_dir.mkdir(exist_ok=True)
 
-    if interactive:
-        if not click.confirm("🤔 Continue with these settings?"):
-            raise click.Abort()
+        today = date.today()
+        first_day_this_month = today.replace(day=1)
 
-    # Initialize generator
-    generator = WeeklyReviewGenerator(config)
-
-    # Show progress with beautiful spinner
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-        transient=True,
-    ) as progress:
-
-        # Fetch GitHub data
-        task1 = progress.add_task("🔍 Fetching GitHub contributions...", total=None)
-        contributions = generator.fetch_github_contributions(date_range)
-        progress.update(task1, description="✅ GitHub contributions fetched")
-
-        task2 = progress.add_task("📝 Fetching PRs and issues...", total=None)
-        prs_issues = generator.fetch_prs_and_issues(date_range)
-        progress.update(task2, description="✅ PRs and issues fetched")
-
-        if config.enable_calendar:
-            task3 = progress.add_task("📅 Fetching calendar events...", total=None)
-            calendar_data = generator.fetch_calendar_events(date_range)
-            progress.update(task3, description="✅ Calendar events fetched")
+        if date_range.start == first_day_this_month:
+            output = reports_dir / f"this-month-{year}-{month:02d}.{format}"
         else:
-            calendar_data = None
+            output = reports_dir / f"monthly-{year}-{month:02d}.{format}"
+    else:
+        output = Path(output)
 
-        if config.enable_claude_tracking:
-            task4 = progress.add_task("🤖 Analyzing Claude activity...", total=None)
-            claude_data = generator.estimate_claude_activity(date_range)
-            progress.update(task4, description="✅ Claude activity analyzed")
-        else:
-            claude_data = None
+    # Check for cached report
+    if not force and output.exists():
+        console.print(f"⚡ [yellow]Using cached report:[/yellow] {output}")
+        console.print(f"💡 [dim]Use --force to regenerate[/dim]")
+        report = output.read_text(encoding='utf-8')
+    else:
+        console.print(f"📅 Generating monthly report for: [bold]{date_range.start}[/bold] to [bold]{date_range.end}[/bold]")
+        console.print(f"👤 GitHub user: [bold cyan]{config.github_username}[/bold cyan]")
 
-        task5 = progress.add_task("📊 Generating monthly report...", total=None)
-        report = generator.generate_report(
-            date_range=date_range,
-            contributions=contributions,
-            prs_issues=prs_issues,
-            calendar_data=calendar_data,
-            claude_data=claude_data,
-            output_format=format
-        )
-        progress.update(task5, description="✅ Monthly report generated")
+        if interactive:
+            if not click.confirm("🤔 Continue with these settings?"):
+                raise click.Abort()
+
+        # Initialize generator
+        generator = WeeklyReviewGenerator(config)
+
+        # Show progress with beautiful spinner
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+            transient=True,
+        ) as progress:
+
+            # Fetch GitHub data
+            task1 = progress.add_task("🔍 Fetching GitHub contributions...", total=None)
+            contributions = generator.fetch_github_contributions(date_range)
+            progress.update(task1, description="✅ GitHub contributions fetched")
+
+            task2 = progress.add_task("📝 Fetching PRs and issues...", total=None)
+            prs_issues = generator.fetch_prs_and_issues(date_range)
+            progress.update(task2, description="✅ PRs and issues fetched")
+
+            if config.enable_calendar:
+                task3 = progress.add_task("📅 Fetching calendar events...", total=None)
+                calendar_data = generator.fetch_calendar_events(date_range)
+                progress.update(task3, description="✅ Calendar events fetched")
+            else:
+                calendar_data = None
+
+            if config.enable_claude_tracking:
+                task4 = progress.add_task("🤖 Analyzing Claude activity...", total=None)
+                claude_data = generator.estimate_claude_activity(date_range)
+                progress.update(task4, description="✅ Claude activity analyzed")
+            else:
+                claude_data = None
+
+            task5 = progress.add_task("📊 Generating monthly report...", total=None)
+            report = generator.generate_report(
+                date_range=date_range,
+                contributions=contributions,
+                prs_issues=prs_issues,
+                calendar_data=calendar_data,
+                claude_data=claude_data,
+                output_format=format
+            )
+            progress.update(task5, description="✅ Monthly report generated")
+
+        # Save report
+        output.write_text(report, encoding='utf-8')
 
     if display:
         # Display mode - show content in CLI
@@ -948,29 +1032,6 @@ def generate_monthly_report(date_range: DateRange, output, format, no_calendar, 
         console.print("✨ [green]Report display complete![/green]")
 
     else:
-        # File mode - save to file
-        if not output:
-            month = date_range.start.month
-            year = date_range.start.year
-            reports_dir = Path(config.output_dir)
-            reports_dir.mkdir(exist_ok=True)
-
-            # Different naming based on month type
-            today = date.today()
-            first_day_this_month = today.replace(day=1)
-
-            if date_range.start == first_day_this_month:
-                # This month (partial)
-                output = reports_dir / f"this-month-{year}-{month:02d}.{format}"
-            else:
-                # Complete month or last month
-                output = reports_dir / f"monthly-{year}-{month:02d}.{format}"
-        else:
-            output = Path(output)
-
-        # Save report
-        output.write_text(report, encoding='utf-8')
-
         # Show success message
         console.print()
         success_panel = Panel.fit(
@@ -982,6 +1043,13 @@ def generate_monthly_report(date_range: DateRange, output, format, no_calendar, 
             border_style="green"
         )
         console.print(success_panel)
+
+        # Handle --reflect flag
+        if reflect:
+            if format == 'markdown':
+                fill_reflections(output)
+            else:
+                console.print("⚠️  [yellow]Reflections only work with markdown format. Use --format markdown --reflect[/yellow]")
 
         # Auto-display by default (unless --no-display is used)
         if not no_display:
@@ -1038,6 +1106,195 @@ def generate_monthly_report(date_range: DateRange, output, format, no_calendar, 
         if interactive:
             if click.confirm("🔍 Open the report file?"):
                 os.system(f"code '{output}'" if os.system("which code > /dev/null 2>&1") == 0 else f"cat '{output}'")
+
+
+def find_report_file(timeframe_str, config):
+    """Find an existing report file for the given timeframe"""
+    date_range = parse_timeframe(timeframe_str)
+    if not date_range:
+        return None
+
+    reports_dir = Path(config.output_dir)
+    if not reports_dir.exists():
+        return None
+
+    is_daily = date_range.start == date_range.end
+    duration_days = (date_range.end - date_range.start).days + 1
+    is_monthly = duration_days > 14
+
+    possible_files = []
+
+    if is_daily:
+        target_date = date_range.start
+        today = date.today()
+        date_name = "today" if target_date == today else "yesterday" if target_date == today - timedelta(days=1) else target_date.strftime("%Y-%m-%d")
+        for ext in ['markdown', 'md']:
+            if date_name == "today":
+                possible_files.append(reports_dir / f"today-{target_date}.{ext}")
+            elif date_name == "yesterday":
+                possible_files.append(reports_dir / f"yesterday-{target_date}.{ext}")
+            possible_files.append(reports_dir / f"daily-{target_date}.{ext}")
+    elif is_monthly:
+        month = date_range.start.month
+        year = date_range.start.year
+        today = date.today()
+        first_day_this_month = today.replace(day=1)
+        for ext in ['markdown', 'md']:
+            if date_range.start == first_day_this_month:
+                possible_files.append(reports_dir / f"this-month-{year}-{month:02d}.{ext}")
+            possible_files.append(reports_dir / f"monthly-{year}-{month:02d}.{ext}")
+    else:
+        week_num = date_range.start.isocalendar()[1]
+        year = date_range.start.year
+        today = date.today()
+        days_since_monday = today.weekday()
+        this_monday = today - timedelta(days=days_since_monday)
+        for ext in ['markdown', 'md']:
+            if date_range.start == this_monday and date_range.end >= today:
+                possible_files.append(reports_dir / f"this-week-{year}-W{week_num:02d}.{ext}")
+            possible_files.append(reports_dir / f"review-{year}-W{week_num:02d}.{ext}")
+            possible_files.append(reports_dir / f"weekly-{year}-W{week_num:02d}.{ext}")
+
+    for f in possible_files:
+        if f.exists():
+            return f
+
+    # Fallback: most recently modified markdown file in reports dir
+    md_files = list(reports_dir.glob("*.markdown")) + list(reports_dir.glob("*.md"))
+    if md_files:
+        return max(md_files, key=lambda p: p.stat().st_mtime)
+
+    return None
+
+
+def fill_reflections(report_path):
+    """Interactively fill out reflection placeholders in a markdown report"""
+    report_path = Path(report_path)
+    content = report_path.read_text(encoding='utf-8')
+
+    has_placeholders = REFLECTION_PLACEHOLDER in content
+    if not has_placeholders:
+        if not click.confirm("📝 Reflections already filled. Overwrite existing reflections?"):
+            console.print("⏭️  Skipping reflections.")
+            return
+
+    console.print()
+    console.print(Panel.fit(
+        "📝 [bold cyan]Time to reflect![/bold cyan]\n"
+        "Answer each question below (press Enter to skip).",
+        title="🎯 Reflections",
+        border_style="cyan"
+    ))
+    console.print()
+
+    for question, heading in REFLECTION_QUESTIONS:
+        answer = click.prompt(f"💭 {question}", default="", show_default=False)
+        answer = answer.strip()
+
+        if not answer:
+            continue
+
+        if has_placeholders:
+            # Replace the placeholder after this heading
+            pattern = re.escape(heading) + r'\n' + re.escape(REFLECTION_PLACEHOLDER)
+            replacement = heading + '\n' + answer
+            content = re.sub(pattern, replacement, content)
+        else:
+            # Overwrite existing content after the heading (up to next heading or section break)
+            pattern = re.escape(heading) + r'\n(.+?)(?=\n###|\n---|\n##|\Z)'
+            replacement = heading + '\n' + answer
+            content = re.sub(pattern, replacement, content, flags=re.DOTALL)
+
+    report_path.write_text(content, encoding='utf-8')
+    console.print()
+    console.print(f"✅ [bold green]Reflections saved to:[/bold green] {report_path}")
+
+
+def reflect_command(sub_timeframe):
+    """Handle the 'receipts reflect' command"""
+    try:
+        config = load_config()
+    except Exception as e:
+        console.print(f"❌ Configuration error: {e}", style="red")
+        console.print("💡 Run: receipts setup", style="yellow")
+        raise click.Abort()
+
+    timeframe_str = sub_timeframe or 'last-week'
+    report_path = find_report_file(timeframe_str, config)
+
+    if not report_path:
+        console.print(f"❌ [red]No report found for '{timeframe_str}'[/red]")
+        console.print()
+        console.print("💡 [yellow]Generate a report first:[/yellow]")
+        console.print(f"  receipts {timeframe_str}")
+        raise click.Abort()
+
+    console.print(f"📄 Found report: [bold]{report_path}[/bold]")
+    fill_reflections(report_path)
+
+
+def list_command():
+    """List all generated reports"""
+    try:
+        config = load_config()
+    except Exception as e:
+        console.print(f"❌ Configuration error: {e}", style="red")
+        console.print("💡 Run: receipts setup", style="yellow")
+        raise click.Abort()
+
+    reports_dir = Path(config.output_dir)
+    if not reports_dir.exists():
+        console.print("📂 [yellow]No reports directory found.[/yellow]")
+        console.print("💡 Generate your first report: [bold cyan]receipts today[/bold cyan]")
+        return
+
+    report_files = sorted(
+        [f for f in reports_dir.iterdir() if f.is_file() and f.suffix in ('.markdown', '.md', '.html', '.json')],
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+
+    if not report_files:
+        console.print("📂 [yellow]No reports found.[/yellow]")
+        console.print("💡 Generate your first report: [bold cyan]receipts today[/bold cyan]")
+        return
+
+    table = Table(title="🧾 Your Receipts", box=box.ROUNDED)
+    table.add_column("#", style="dim", width=3)
+    table.add_column("Report", style="cyan", no_wrap=True)
+    table.add_column("Format", style="yellow", width=8)
+    table.add_column("Size", style="green", justify="right", width=8)
+    table.add_column("Modified", style="magenta", no_wrap=True, width=12)
+    table.add_column("Refl?", style="white", width=5)
+
+    from datetime import datetime
+
+    for i, f in enumerate(report_files, 1):
+        stat = f.stat()
+        size = stat.st_size
+        if size >= 1024:
+            size_str = f"{size / 1024:.1f} KB"
+        else:
+            size_str = f"{size} B"
+
+        modified = datetime.fromtimestamp(stat.st_mtime).strftime("%b %d %H:%M")
+
+        ext = f.suffix.lstrip('.')
+        fmt = {'markdown': 'md', 'md': 'md', 'html': 'html', 'json': 'json'}.get(ext, ext)
+
+        # Check if reflections are filled (only for markdown files)
+        reflected = ""
+        if ext in ('markdown', 'md'):
+            content = f.read_text(encoding='utf-8')
+            if REFLECTION_PLACEHOLDER in content:
+                reflected = "—"
+            elif "## 🎯 Weekly Reflection" in content or "## 🎯" in content:
+                reflected = "✅"
+
+        table.add_row(str(i), f.name, fmt, size_str, modified, reflected)
+
+    console.print(table)
+    console.print(f"\n📁 [dim]{reports_dir}[/dim]")
 
 
 def setup_command():
@@ -1352,6 +1609,10 @@ def render_command(file_path_str: str, output: Optional[str], format: str, inter
         if interactive:
             if click.confirm("🔍 Open the rendered report?"):
                 os.system(f"code '{output_path}'" if os.system("which code > /dev/null 2>&1") == 0 else f"cat '{output_path}'")
+
+
+# Update the CLI docstring with the dynamic version
+cli.__doc__ = cli.__doc__.replace("v0.2.0", f"v{__version__}")
 
 
 def main():
