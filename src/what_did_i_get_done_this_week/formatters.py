@@ -26,14 +26,29 @@ class MarkdownFormatter(ReportFormatter):
         """Generate beautiful Markdown report"""
         lines = []
 
+        is_daily = report.date_range.start == report.date_range.end
+        duration_days = (report.date_range.end - report.date_range.start).days + 1
+        is_monthly = duration_days > 14
+
+        if is_daily:
+            date_label = report.date_range.start.strftime("%m/%d/%y")
+            period_type = "Daily"
+        elif is_monthly:
+            period_type = "Monthly"
+        else:
+            period_type = "Weekly"
+
         # Header
-        lines.append(f"# Weekly Review: {report.date_range.start} to {report.date_range.end}")
+        if is_daily:
+            lines.append(f"# {date_label} Review")
+        else:
+            lines.append(f"# {period_type} Review: {report.date_range.start} to {report.date_range.end}")
         lines.append("")
         lines.append(f"*Generated on {report.generated_at.strftime('%a %b %d %H:%M:%S %Z %Y')}*")
         lines.append("")
 
-        # Weekly Highlights
-        lines.append("## 🌟 Weekly Highlights")
+        # Highlights
+        lines.append(f"## 🌟 {date_label + ' ' if is_daily else period_type + ' '}Highlights")
         lines.append("")
 
         # Key Achievements
@@ -67,11 +82,12 @@ class MarkdownFormatter(ReportFormatter):
         lines.append("")
 
         # Activity Patterns
-        lines.append("### 📊 **Activity Patterns**")
-        for pattern in report.highlights.activity_patterns:
-            if pattern:
-                lines.append(f"- **{pattern}**")
-        lines.append("")
+        if report.highlights.activity_patterns:
+            lines.append("### 📊 **Activity Patterns**")
+            for pattern in report.highlights.activity_patterns:
+                if pattern:
+                    lines.append(f"- **{pattern}**")
+            lines.append("")
 
         # GitHub Activity Summary
         lines.append("## 📊 GitHub Activity Summary")
@@ -83,8 +99,9 @@ class MarkdownFormatter(ReportFormatter):
         lines.append("")
 
         # Daily Breakdown
-        lines.append("## 📊 Weekly Summary")
-        lines.append("")
+        if not is_daily:
+            lines.append(f"## 📊 {period_type} Summary")
+            lines.append("")
 
         for daily in report.daily_summaries:
             if any(c.count > 0 for c in daily.contributions) or daily.meetings:
@@ -139,10 +156,10 @@ class MarkdownFormatter(ReportFormatter):
                     lines.append(f"{i}. **[{issue.repository}]** \"{issue.title}\" ({date_str})")
                 lines.append("")
 
-        # Weekly Reflection
+        # Reflection
         lines.append("---")
         lines.append("")
-        lines.append("## 🎯 Weekly Reflection")
+        lines.append(f"## 🎯 {period_type} Reflection")
         lines.append("")
         lines.append("### What could I have done better?")
         lines.append("*[Add your thoughts]*")

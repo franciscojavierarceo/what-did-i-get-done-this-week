@@ -393,8 +393,10 @@ class WeeklyReviewGenerator:
         )
 
         # Generate highlights
+        is_daily = date_range.start == date_range.end
+        period_label = "today" if is_daily else "across the week"
         key_achievements = [
-            f"{total_contributions} GitHub contributions across the week",
+            f"{total_contributions} GitHub contributions {period_label}",
             f"{total_prs_reviewed} code reviews completed",
         ]
         if total_prs_created > 0:
@@ -412,7 +414,7 @@ class WeeklyReviewGenerator:
                 f"{len([d for d in doc_contributions if d.is_blog_post])} blog post(s)",
                 f"{len([d for d in doc_contributions if d.type == 'review'])} documentation PR(s) reviewed",
             ] if doc_contributions else [],
-            activity_patterns=[
+            activity_patterns=[] if is_daily else [
                 pattern for pattern in [
                     f"Most productive day: {most_productive_day.strftime('%A')} with {max_contributions} contributions" if most_productive_day else None,
                     f"Weekend contributions: {weekend_contributions}" if weekend_contributions > 0 else "Work-life balance: No weekend coding",
