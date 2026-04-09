@@ -441,6 +441,47 @@ class WeeklyReviewGenerator:
 
             current_date += timedelta(days=1)
 
+        # Parse PRs and issues into model objects
+        created_pr_models = []
+        for pr in prs_issues["created_prs"]:
+            repo_name = pr.get("repository", {}).get("nameWithOwner", "") if isinstance(pr.get("repository"), dict) else str(pr.get("repository", ""))
+            created_pr_models.append(GitHubPullRequest(
+                number=pr.get("number", 0),
+                title=pr.get("title", ""),
+                url=pr.get("url", ""),
+                repository=repo_name,
+                state=pr.get("state", ""),
+                created_at=datetime.fromisoformat(pr["createdAt"].replace("Z", "+00:00")),
+                author=pr.get("author", {}).get("login", "") if isinstance(pr.get("author"), dict) else str(pr.get("author", "")),
+            ))
+
+        created_issue_models = []
+        for issue in prs_issues["created_issues"]:
+            repo_name = issue.get("repository", {}).get("nameWithOwner", "") if isinstance(issue.get("repository"), dict) else str(issue.get("repository", ""))
+            created_issue_models.append(GitHubIssue(
+                number=issue.get("number", 0),
+                title=issue.get("title", ""),
+                url=issue.get("url", ""),
+                repository=repo_name,
+                state=issue.get("state", ""),
+                created_at=datetime.fromisoformat(issue["createdAt"].replace("Z", "+00:00")),
+                author=issue.get("author", {}).get("login", "") if isinstance(issue.get("author"), dict) else str(issue.get("author", "")),
+            ))
+
+        reviewed_pr_models = []
+        for node in prs_issues["reviewed_prs"]["data"]["search"]["nodes"]:
+            if not node:
+                continue
+            reviewed_pr_models.append(GitHubPullRequest(
+                number=node.get("number", 0),
+                title=node.get("title", ""),
+                url=node.get("url", ""),
+                repository=node.get("repository", {}).get("nameWithOwner", ""),
+                state=node.get("state", ""),
+                created_at=datetime.fromisoformat(node["createdAt"].replace("Z", "+00:00")),
+                author=node.get("author", {}).get("login", "") if node.get("author") else "",
+            ))
+
         # Create the report
         report = WeeklyReport(
             date_range=date_range,
@@ -449,6 +490,10 @@ class WeeklyReviewGenerator:
             highlights=highlights,
             daily_summaries=daily_summaries,
             documentation_contributions=doc_contributions,
+            created_prs=created_pr_models,
+            created_issues=created_issue_models,
+            reviewed_prs=reviewed_pr_models,
+            claude_data=claude_data,
             metadata={
                 "generator": "what-did-i-get-done-this-week-v2",
                 "github_username": self.config.github_username,

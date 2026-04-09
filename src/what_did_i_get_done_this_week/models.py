@@ -137,6 +137,10 @@ class WeeklyReport(BaseModel):
     highlights: WeeklyHighlights
     daily_summaries: List[DailySummary]
     documentation_contributions: List[DocumentationContribution]
+    created_prs: List[GitHubPullRequest] = Field(default_factory=list)
+    created_issues: List[GitHubIssue] = Field(default_factory=list)
+    reviewed_prs: List[GitHubPullRequest] = Field(default_factory=list)
+    claude_data: Optional[Dict[str, Any]] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
     class Config:

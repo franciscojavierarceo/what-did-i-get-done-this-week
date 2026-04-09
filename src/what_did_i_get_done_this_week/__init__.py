@@ -5,6 +5,6 @@ A beautiful CLI tool for tracking weekly accomplishments and generating
 professional accountability reports.
 """
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 __author__ = "Francisco Javier Arceo"
 # __email__ = "franciscojavierarceo@gmail.com"

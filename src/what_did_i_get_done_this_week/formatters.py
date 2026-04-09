@@ -75,11 +75,11 @@ class MarkdownFormatter(ReportFormatter):
             lines.append("")
 
         # Vibe Engineering
-        lines.append("### 🤖 **Vibe Engineering**")
-        lines.append("- **Claude sessions** estimated for development work")
-        lines.append("  - Sessions focused on implementation and problem-solving")
-        lines.append("  - AI-assisted code reviews and architectural decisions")
-        lines.append("")
+        if report.claude_data and report.claude_data.get("total_sessions", 0) > 0:
+            total = report.claude_data["total_sessions"]
+            lines.append("### 🤖 **Vibe Engineering**")
+            lines.append(f"- **{total} Claude session{'s' if total != 1 else ''}** estimated from shell history")
+            lines.append("")
 
         # Activity Patterns
         if report.highlights.activity_patterns:
@@ -98,32 +98,69 @@ class MarkdownFormatter(ReportFormatter):
         lines.append(f"- **Pull Request Reviews**: {report.stats.total_prs_reviewed}")
         lines.append("")
 
+        # PRs Created (detailed)
+        if report.created_prs:
+            lines.append("### 🔧 Pull Requests Created")
+            for i, pr in enumerate(report.created_prs, 1):
+                date_str = pr.created_at.strftime("%Y-%m-%d")
+                state = pr.state.lower()
+                lines.append(f"{i}. **[{pr.repository}#{pr.number}]({pr.url})** \"{pr.title}\" ({date_str}, {state})")
+            lines.append("")
+
+        # Issues Created (detailed)
+        if report.created_issues:
+            lines.append("### 🐛 Issues Created")
+            for i, issue in enumerate(report.created_issues, 1):
+                date_str = issue.created_at.strftime("%Y-%m-%d")
+                state = issue.state.lower()
+                lines.append(f"{i}. **[{issue.repository}#{issue.number}]({issue.url})** \"{issue.title}\" ({date_str}, {state})")
+            lines.append("")
+
+        # PRs Reviewed (detailed, excluding doc reviews already shown below)
+        non_doc_reviews = [pr for pr in report.reviewed_prs
+                          if not any(d.url == pr.url for d in report.documentation_contributions)]
+        if non_doc_reviews:
+            lines.append("### 👀 Pull Requests Reviewed")
+            for i, pr in enumerate(non_doc_reviews, 1):
+                state = pr.state.lower()
+                lines.append(f"{i}. **[{pr.repository}#{pr.number}]({pr.url})** \"{pr.title}\" by @{pr.author} ({state})")
+            lines.append("")
+
+        # Meetings (for daily reports, show inline; for weekly, show in daily breakdown)
+        if is_daily:
+            all_meetings = [m for daily in report.daily_summaries for m in daily.meetings]
+            if all_meetings:
+                lines.append(f"### 📅 Meetings ({len(all_meetings)})")
+                for i, meeting in enumerate(all_meetings, 1):
+                    time_str = self._format_meeting_time(meeting)
+                    lines.append(f"{i}. {time_str} - {meeting.title}")
+                lines.append("")
+
         # Daily Breakdown
         if not is_daily:
             lines.append(f"## 📊 {period_type} Summary")
             lines.append("")
 
-        for daily in report.daily_summaries:
-            if any(c.count > 0 for c in daily.contributions) or daily.meetings:
-                # Day header
-                emoji = self._get_day_emoji(daily.day_name)
-                short_date = daily.date.strftime("%m/%d")
-                lines.append(f"- **{emoji} {daily.day_name} {short_date}:**")
+            for daily in report.daily_summaries:
+                if any(c.count > 0 for c in daily.contributions) or daily.meetings:
+                    # Day header
+                    emoji = self._get_day_emoji(daily.day_name)
+                    short_date = daily.date.strftime("%m/%d")
+                    lines.append(f"- **{emoji} {daily.day_name} {short_date}:**")
 
-                # GitHub contributions
-                total_day_contributions = sum(c.count for c in daily.contributions)
-                if total_day_contributions > 0:
-                    lines.append(f"   - {total_day_contributions} GitHub contributions")
-                    # TODO: Add specific PRs, issues, reviews for this day
+                    # GitHub contributions
+                    total_day_contributions = sum(c.count for c in daily.contributions)
+                    if total_day_contributions > 0:
+                        lines.append(f"   - {total_day_contributions} GitHub contributions")
 
-                # Meetings
-                if daily.meetings:
-                    lines.append(f"   - {len(daily.meetings)} required meetings")
-                    for i, meeting in enumerate(daily.meetings[:10], 1):  # Limit to 10
-                        time_str = self._format_meeting_time(meeting)
-                        lines.append(f"     {i}. {time_str} - {meeting.title}")
+                    # Meetings
+                    if daily.meetings:
+                        lines.append(f"   - {len(daily.meetings)} required meetings")
+                        for i, meeting in enumerate(daily.meetings[:10], 1):  # Limit to 10
+                            time_str = self._format_meeting_time(meeting)
+                            lines.append(f"     {i}. {time_str} - {meeting.title}")
 
-                lines.append("")
+                    lines.append("")
 
         # Documentation Contributions
         if report.documentation_contributions:
