@@ -14,6 +14,7 @@ Turn your scattered work into organized weekly reports. Perfect for engineers, m
 🎨 **Beautiful CLI** - Rich formatting, progress bars, and interactive setup
 📊 **GitHub Integration** - Track commits, PRs, reviews, and issues
 📅 **Calendar Integration** - Meeting tracking (Google Workspace)
+🕒 **Automated Scheduling** - Daily/weekly reports with GUI popups for reflections
 🎯 **Multiple Formats** - Generate Markdown, HTML, and JSON reports
 🔄 **Render Engine** - Convert between formats with caching
 📺 **Display Mode** - View reports directly in your terminal

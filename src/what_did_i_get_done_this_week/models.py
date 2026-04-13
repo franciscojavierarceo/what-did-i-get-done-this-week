@@ -85,6 +85,20 @@ class ClaudeSession(BaseModel):
     categories: Dict[str, int] = Field(default_factory=dict)  # pr_work, exploratory, etc.
 
 
+class GoogleDriveItem(BaseModel):
+    """Google Drive document or presentation"""
+    title: str
+    url: str
+    mime_type: str  # application/vnd.google-apps.document or .presentation
+    modified_time: datetime
+
+    @property
+    def item_type(self) -> str:
+        if "presentation" in self.mime_type:
+            return "slides"
+        return "doc"
+
+
 class DocumentationContribution(BaseModel):
     """Documentation contribution tracking"""
     title: str
@@ -137,6 +151,7 @@ class WeeklyReport(BaseModel):
     highlights: WeeklyHighlights
     daily_summaries: List[DailySummary]
     documentation_contributions: List[DocumentationContribution]
+    google_drive_items: List[GoogleDriveItem] = Field(default_factory=list)
     created_prs: List[GitHubPullRequest] = Field(default_factory=list)
     created_issues: List[GitHubIssue] = Field(default_factory=list)
     reviewed_prs: List[GitHubPullRequest] = Field(default_factory=list)

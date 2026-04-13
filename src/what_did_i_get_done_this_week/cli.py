@@ -21,6 +21,10 @@ from .config import load_config, setup_config
 from .models import DateRange, OutputFormat
 from .readers import read_report
 from .formatters import MarkdownFormatter, HTMLFormatter, JSONFormatter
+from .scheduling import ScheduleManager
+from .scheduling.popup import TerminalReportDisplay
+from .scheduling.browser_popup import BrowserReportPopup
+from .scheduling.native_popup import show_native_popup, native_popup_available
 from . import __version__
 
 console = Console()
@@ -145,8 +149,9 @@ def get_week_dates(start_date: str = None) -> DateRange:
 @click.option('--no-display', is_flag=True, help='Skip displaying generated report (save to file only)')
 @click.option('--force', is_flag=True, help='Force regeneration even if cached output exists')
 @click.option('--reflect', '-r', is_flag=True, help='Prompt for reflections after generating report')
+@click.option('--no-popup', is_flag=True, help='Force terminal interface for reflections (disable GUI popup)')
 @click.version_option(version=__version__)
-def cli(timeframe, sub_timeframe, output, format, no_calendar, no_claude, interactive, display, no_display, force, reflect):
+def cli(timeframe, sub_timeframe, output, format, no_calendar, no_claude, interactive, display, no_display, force, reflect, no_popup):
     """🎯 What Did I Get Done This Week? v0.3.0
 
     Got the receipts on your productivity! A beautiful CLI tool for tracking
@@ -179,10 +184,17 @@ def cli(timeframe, sub_timeframe, output, format, no_calendar, no_claude, intera
 
     \b
     Reflect:
-      receipts reflect             # Reflect on last week's report
-      receipts reflect yesterday   # Reflect on yesterday's report
-      receipts reflect this-week   # Reflect on this week's report
-      receipts today reflect       # Reflect on today's report
+      receipts reflect             # Reflect on last week's report (GUI popup)
+      receipts reflect yesterday   # Reflect on yesterday's report (GUI popup)
+      receipts reflect --no-popup  # Reflect using terminal interface
+      receipts today reflect       # Reflect on today's report (GUI popup)
+
+    \b
+    Schedule:
+      receipts schedule daily         # Setup daily reports at 9am for yesterday
+      receipts schedule weekly        # Setup weekly reports at 9am Mondays for last week
+      receipts schedule status        # Show current schedule status
+      receipts schedule disable       # Disable all scheduled reports
 
     \b
     Manage:
@@ -205,10 +217,13 @@ def cli(timeframe, sub_timeframe, output, format, no_calendar, no_claude, intera
         list_command()
         return
     elif timeframe == 'reflect':
-        reflect_command(sub_timeframe)
+        reflect_command(sub_timeframe, no_popup)
         return
     elif sub_timeframe == 'reflect':
-        reflect_command(timeframe)
+        reflect_command(timeframe, no_popup)
+        return
+    elif timeframe == 'schedule':
+        schedule_command(sub_timeframe)
         return
     elif timeframe == 'render':
         # For render command, we need to show usage since file path is required
@@ -499,7 +514,7 @@ def generate_daily_report(date_range: DateRange, output, format, no_calendar, no
         # Handle --reflect flag
         if reflect:
             if format == 'markdown':
-                fill_reflections(output)
+                handle_reflections(output, config, no_popup)
             else:
                 console.print("⚠️  [yellow]Reflections only work with markdown format. Use --format markdown --reflect[/yellow]")
 
@@ -821,7 +836,7 @@ def generate_weekly_report(date_range: DateRange, output, format, no_calendar, n
         # Handle --reflect flag
         if reflect:
             if format == 'markdown':
-                fill_reflections(output)
+                handle_reflections(output, config, no_popup)
             else:
                 console.print("⚠️  [yellow]Reflections only work with markdown format. Use --format markdown --reflect[/yellow]")
 
@@ -1047,7 +1062,7 @@ def generate_monthly_report(date_range: DateRange, output, format, no_calendar, 
         # Handle --reflect flag
         if reflect:
             if format == 'markdown':
-                fill_reflections(output)
+                handle_reflections(output, config, no_popup)
             else:
                 console.print("⚠️  [yellow]Reflections only work with markdown format. Use --format markdown --reflect[/yellow]")
 
@@ -1167,8 +1182,106 @@ def find_report_file(timeframe_str, config):
     return None
 
 
+def handle_reflections(report_path, config, no_popup=False):
+    """Handle reflections using either popup or terminal interface"""
+    try:
+        report_path = Path(report_path)
+        report_content = report_path.read_text(encoding='utf-8')
+    except Exception as e:
+        console.print(f"❌ Failed to read report: {e}", style="red")
+        return
+
+    # Determine which interface to use
+    if no_popup:
+        # User explicitly wants terminal mode
+        console.print("💻 Using terminal interface...")
+        terminal_display = TerminalReportDisplay()
+        result = terminal_display.show_report_with_reflections(report_content, str(report_path))
+    elif config.schedule.popup_enabled:
+        # Try native popup with automatic fallback chain
+        if native_popup_available():
+            try:
+                result = show_native_popup(report_content, str(report_path), preferred_method="auto")
+
+                # If native popup failed (not user-cancelled), fall back to browser popup
+                if result is None:
+                    console.print("⏭️ Falling back to browser popup...")
+                    browser_popup = BrowserReportPopup(report_content, str(report_path))
+                    result = browser_popup.show()
+
+                    # If browser also failed, fall back to terminal
+                    if result in [None, "timeout"]:
+                        console.print("⏭️ Falling back to terminal interface...")
+                        terminal_display = TerminalReportDisplay()
+                        result = terminal_display.show_report_with_reflections(report_content, str(report_path))
+            except Exception as e:
+                console.print(f"❌ Native popup failed: {e}", style="yellow")
+                console.print("⏭️ Falling back to browser popup...")
+                try:
+                    browser_popup = BrowserReportPopup(report_content, str(report_path))
+                    result = browser_popup.show()
+
+                    if result in [None, "timeout"]:
+                        console.print("⏭️ Falling back to terminal interface...")
+                        terminal_display = TerminalReportDisplay()
+                        result = terminal_display.show_report_with_reflections(report_content, str(report_path))
+                except Exception as e2:
+                    console.print(f"❌ Browser popup failed: {e2}", style="yellow")
+                    console.print("⏭️ Falling back to terminal interface...")
+                    terminal_display = TerminalReportDisplay()
+                    result = terminal_display.show_report_with_reflections(report_content, str(report_path))
+        else:
+            # Native popup not available, try browser popup
+            console.print("🌐 Opening browser popup interface...")
+            try:
+                browser_popup = BrowserReportPopup(report_content, str(report_path))
+                result = browser_popup.show()
+
+                # If browser popup failed or timed out, fall back to terminal
+                if result in [None, "timeout"]:
+                    console.print("⏭️ Falling back to terminal interface...")
+                    terminal_display = TerminalReportDisplay()
+                    result = terminal_display.show_report_with_reflections(report_content, str(report_path))
+            except Exception as e:
+                console.print(f"❌ Browser popup failed: {e}", style="yellow")
+                console.print("⏭️ Falling back to terminal interface...")
+                terminal_display = TerminalReportDisplay()
+                result = terminal_display.show_report_with_reflections(report_content, str(report_path))
+    else:
+        # Popup disabled in config, use terminal
+        console.print("💻 Using terminal interface...")
+        terminal_display = TerminalReportDisplay()
+        result = terminal_display.show_report_with_reflections(report_content, str(report_path))
+
+    # Handle the result
+    if result == "saved":
+        console.print("✅ Reflections saved successfully!", style="green")
+    elif result == "skipped":
+        console.print("⏭️ Reflections skipped", style="yellow")
+    elif result == "cancelled":
+        console.print("🚪 Window closed", style="dim")
+    elif result == "disable":
+        # Only disable if there are actually schedules to disable
+        if config.schedule.daily_enabled or config.schedule.weekly_enabled:
+            console.print("🚫 Disabling scheduled reports...")
+            scheduler = ScheduleManager()
+            if scheduler.remove_all_schedules():
+                config.schedule.daily_enabled = False
+                config.schedule.weekly_enabled = False
+                config.save()
+                console.print("✅ Scheduled reports disabled", style="green")
+            else:
+                console.print("❌ Failed to disable scheduled reports", style="red")
+        else:
+            console.print("ℹ️ No scheduled reports were enabled", style="blue")
+    elif result == "error":
+        console.print("❌ Failed to save reflections", style="red")
+    else:
+        console.print("ℹ️ Reflection session completed", style="blue")
+
+
 def fill_reflections(report_path):
-    """Interactively fill out reflection placeholders in a markdown report"""
+    """Legacy function for backward compatibility - now uses terminal interface only"""
     report_path = Path(report_path)
     content = report_path.read_text(encoding='utf-8')
 
@@ -1210,7 +1323,7 @@ def fill_reflections(report_path):
     console.print(f"✅ [bold green]Reflections saved to:[/bold green] {report_path}")
 
 
-def reflect_command(sub_timeframe):
+def reflect_command(sub_timeframe, no_popup=False):
     """Handle the 'receipts reflect' command"""
     try:
         config = load_config()
@@ -1230,7 +1343,10 @@ def reflect_command(sub_timeframe):
         raise click.Abort()
 
     console.print(f"📄 Found report: [bold]{report_path}[/bold]")
-    fill_reflections(report_path)
+    console.print(f"🤔 Opening reflection interface...")
+
+    # Use the new unified reflection handler
+    handle_reflections(report_path, config, no_popup)
 
 
 def list_command():
@@ -1609,6 +1725,177 @@ def render_command(file_path_str: str, output: Optional[str], format: str, inter
         if interactive:
             if click.confirm("🔍 Open the rendered report?"):
                 os.system(f"code '{output_path}'" if os.system("which code > /dev/null 2>&1") == 0 else f"cat '{output_path}'")
+
+
+def schedule_command(sub_command: Optional[str]):
+    """Handle the 'receipts schedule' command"""
+
+    if not sub_command:
+        # Show schedule usage
+        console.print("📅 [bold]Schedule Management[/bold]")
+        console.print()
+        console.print("💡 [yellow]Usage:[/yellow]")
+        console.print("  receipts schedule daily     # Setup daily reports at 9am for yesterday")
+        console.print("  receipts schedule weekly    # Setup weekly reports at 9am Mondays for last week")
+        console.print("  receipts schedule status    # Show current schedule status")
+        console.print("  receipts schedule disable   # Disable all scheduled reports")
+        console.print()
+        console.print("🎯 [cyan]Examples:[/cyan]")
+        console.print("  receipts schedule daily     # Interactive setup for daily reports")
+        console.print("  receipts schedule weekly    # Interactive setup for weekly reports")
+        console.print("  receipts schedule status    # Check what's currently scheduled")
+        console.print("  receipts schedule disable   # Remove all automation")
+        return
+
+    try:
+        config = load_config()
+    except Exception as e:
+        console.print(f"❌ Configuration error: {e}", style="red")
+        console.print("💡 Run 'receipts setup' to configure your system", style="yellow")
+        raise click.Abort()
+
+    scheduler = ScheduleManager()
+
+    if sub_command == 'daily':
+        console.print("📅 Setting up daily report scheduling...")
+
+        # Ask for time preference
+        time_input = click.prompt(
+            "What time should daily reports be generated? (HH:MM, 24-hour format)",
+            default="09:00"
+        )
+
+        # Ask for popup preference
+        use_popup = click.confirm(
+            "Use GUI popup for report display and reflection input?",
+            default=True
+        )
+
+        console.print(f"\n📋 Configuration:")
+        console.print(f"   Schedule: Daily at {time_input}")
+        console.print(f"   Report: Yesterday's activities")
+        console.print(f"   Interface: {'GUI Popup' if use_popup else 'Terminal'}")
+
+        if not click.confirm("\nProceed with this configuration?"):
+            console.print("❌ Setup cancelled", style="yellow")
+            return
+
+        # Setup the schedule
+        success = scheduler.setup_daily_schedule(time_input, popup=use_popup)
+
+        if success:
+            # Update config
+            config.schedule.daily_enabled = True
+            config.schedule.daily_time = time_input
+            config.schedule.popup_enabled = use_popup
+            config.save()
+
+            console.print(f"✅ Daily reports scheduled for {time_input} every day", style="green")
+            console.print(f"   Mode: {'GUI Popup' if use_popup else 'Terminal'}")
+            console.print(f"   Report: Yesterday's activities")
+            console.print("\n💡 The schedule will run automatically. You can disable it with: receipts schedule disable")
+        else:
+            console.print("❌ Failed to setup daily scheduling", style="red")
+
+    elif sub_command == 'weekly':
+        console.print("📅 Setting up weekly report scheduling...")
+
+        # Ask for day preference
+        day_input = click.prompt(
+            "What day of the week should weekly reports be generated?",
+            default="monday",
+            type=click.Choice(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'])
+        )
+
+        # Ask for time preference
+        time_input = click.prompt(
+            "What time should weekly reports be generated? (HH:MM, 24-hour format)",
+            default="09:00"
+        )
+
+        # Ask for popup preference
+        use_popup = click.confirm(
+            "Use GUI popup for report display and reflection input?",
+            default=True
+        )
+
+        console.print(f"\n📋 Configuration:")
+        console.print(f"   Schedule: Weekly on {day_input.title()}s at {time_input}")
+        console.print(f"   Report: Previous week's activities (Monday-Sunday)")
+        console.print(f"   Interface: {'GUI Popup' if use_popup else 'Terminal'}")
+
+        if not click.confirm("\nProceed with this configuration?"):
+            console.print("❌ Setup cancelled", style="yellow")
+            return
+
+        # Setup the schedule
+        success = scheduler.setup_weekly_schedule(time_input, day_input, popup=use_popup)
+
+        if success:
+            # Update config
+            config.schedule.weekly_enabled = True
+            config.schedule.weekly_time = time_input
+            config.schedule.weekly_day = day_input.lower()
+            config.schedule.popup_enabled = use_popup
+            config.save()
+
+            console.print(f"✅ Weekly reports scheduled for {time_input} every {day_input.title()}", style="green")
+            console.print(f"   Mode: {'GUI Popup' if use_popup else 'Terminal'}")
+            console.print(f"   Report: Previous week's activities")
+            console.print("\n💡 The schedule will run automatically. You can disable it with: receipts schedule disable")
+        else:
+            console.print("❌ Failed to setup weekly scheduling", style="red")
+
+    elif sub_command == 'status':
+        console.print("📅 Schedule Status")
+        scheduler.print_schedule_status()
+
+        # Also show config status
+        console.print("\n⚙️ Configuration:")
+        console.print(f"   Daily enabled: {'✅ Yes' if config.schedule.daily_enabled else '❌ No'}")
+        if config.schedule.daily_enabled:
+            console.print(f"   Daily time: {config.schedule.daily_time}")
+
+        console.print(f"   Weekly enabled: {'✅ Yes' if config.schedule.weekly_enabled else '❌ No'}")
+        if config.schedule.weekly_enabled:
+            console.print(f"   Weekly time: {config.schedule.weekly_time} on {config.schedule.weekly_day.title()}s")
+
+        if config.schedule.daily_enabled or config.schedule.weekly_enabled:
+            console.print(f"   Interface mode: {'GUI Popup' if config.schedule.popup_enabled else 'Terminal'}")
+
+    elif sub_command == 'disable':
+        if not config.schedule.daily_enabled and not config.schedule.weekly_enabled:
+            console.print("ℹ️ No scheduled reports are currently enabled", style="yellow")
+            return
+
+        console.print("🚫 Current scheduled reports:")
+        if config.schedule.daily_enabled:
+            console.print(f"   • Daily at {config.schedule.daily_time}")
+        if config.schedule.weekly_enabled:
+            console.print(f"   • Weekly on {config.schedule.weekly_day.title()}s at {config.schedule.weekly_time}")
+
+        if not click.confirm("\nAre you sure you want to disable all scheduled reports?"):
+            console.print("❌ Cancelled", style="yellow")
+            return
+
+        console.print("🚫 Disabling all scheduled reports...")
+
+        success = scheduler.remove_all_schedules()
+
+        if success:
+            # Update config
+            config.schedule.daily_enabled = False
+            config.schedule.weekly_enabled = False
+            config.save()
+
+            console.print("✅ All scheduled reports disabled", style="green")
+            console.print("💡 You can re-enable them anytime with: receipts schedule daily/weekly")
+        else:
+            console.print("❌ Failed to disable some scheduled reports", style="red")
+
+    else:
+        console.print(f"❌ Unknown schedule command: {sub_command}", style="red")
+        console.print("💡 Use: receipts schedule [daily|weekly|status|disable]", style="yellow")
 
 
 # Update the CLI docstring with the dynamic version

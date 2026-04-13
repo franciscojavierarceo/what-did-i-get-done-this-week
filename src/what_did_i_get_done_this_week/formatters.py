@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import List
 
-from .models import WeeklyReport, DailySummary, CalendarEvent
+from .models import WeeklyReport, DailySummary, CalendarEvent, GoogleDriveItem
 
 
 class ReportFormatter(ABC):
@@ -162,35 +162,34 @@ class MarkdownFormatter(ReportFormatter):
 
                     lines.append("")
 
-        # Documentation Contributions
-        if report.documentation_contributions:
-            lines.append("### 📝 Documentation & Content Contributions")
+        # Documentation & Content
+        drive_docs = [i for i in report.google_drive_items if i.item_type == "doc"]
+        drive_slides = [i for i in report.google_drive_items if i.item_type == "slides"]
+        blog_posts = report.documentation_contributions  # already filtered to blog-only
+
+        if drive_docs or drive_slides or blog_posts:
+            lines.append("### 📝 Documentation & Content")
             lines.append("")
 
-            # Group by type
-            prs = [d for d in report.documentation_contributions if d.type == "pr"]
-            reviews = [d for d in report.documentation_contributions if d.type == "review"]
-            issues = [d for d in report.documentation_contributions if d.type == "issue"]
-
-            if prs:
-                lines.append("#### 🔧 Documentation PRs Created")
-                for i, pr in enumerate(prs, 1):
-                    date_str = pr.created_at.strftime("%Y-%m-%d")
-                    lines.append(f"{i}. **[{pr.repository}]** \"{pr.title}\" ({date_str})")
+            if drive_docs:
+                lines.append("#### 📄 Google Docs")
+                for i, doc in enumerate(drive_docs, 1):
+                    date_str = doc.modified_time.strftime("%b %d")
+                    lines.append(f"{i}. [{doc.title}]({doc.url}) ({date_str})")
                 lines.append("")
 
-            if reviews:
-                lines.append("#### 👀 Documentation PRs Reviewed")
-                for i, review in enumerate(reviews, 1):
-                    date_str = review.created_at.strftime("%Y-%m-%d")
-                    lines.append(f"{i}. **[{review.repository}]** \"{review.title}\" ({date_str})")
+            if drive_slides:
+                lines.append("#### 📊 Google Slides")
+                for i, slide in enumerate(drive_slides, 1):
+                    date_str = slide.modified_time.strftime("%b %d")
+                    lines.append(f"{i}. [{slide.title}]({slide.url}) ({date_str})")
                 lines.append("")
 
-            if issues:
-                lines.append("#### 🐛 Documentation Issues Created")
-                for i, issue in enumerate(issues, 1):
-                    date_str = issue.created_at.strftime("%Y-%m-%d")
-                    lines.append(f"{i}. **[{issue.repository}]** \"{issue.title}\" ({date_str})")
+            if blog_posts:
+                lines.append("#### ✍️ Blog Posts")
+                for i, post in enumerate(blog_posts, 1):
+                    date_str = post.created_at.strftime("%Y-%m-%d")
+                    lines.append(f"{i}. **[{post.repository}]** \"{post.title}\" ({date_str})")
                 lines.append("")
 
         # Reflection

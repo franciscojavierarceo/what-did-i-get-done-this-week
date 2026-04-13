@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "what-did-i-get-done-this-week"
-version = "0.2.0"
+dynamic = ["version"]
 description = "A beautiful CLI tool to track your weekly accomplishments and generate professional accountability reports"
 readme = "README.md"
 license = "MIT"
@@ -40,6 +40,10 @@ dependencies = [
     "google-auth-oauthlib>=1.0.0",
     "google-auth-httplib2>=0.2.0",
     "google-api-python-client>=2.0.0",
+    "python-crontab>=3.0.0", # Cron job management
+    "apscheduler>=3.10.0", # Fallback scheduler
+    "pywebview>=4.0.0", # Native desktop app windows
+    "markdown>=3.4.0", # Markdown parsing for popup rendering
 ]
 requires-python = ">=3.8"
 
@@ -62,6 +66,10 @@ Issues = "https://github.com/franciscojavierarceo/what-did-i-get-done-this-week/
 receipts = "what_did_i_get_done_this_week.cli:main"
 what-did-i-get-done-this-week = "what_did_i_get_done_this_week.cli:main"
 weekly-review = "what_did_i_get_done_this_week.cli:main"
+receipts-scheduled = "what_did_i_get_done_this_week.scheduled_run:main"
+
+[tool.hatch.version]
+path = "src/what_did_i_get_done_this_week/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/what_did_i_get_done_this_week"]

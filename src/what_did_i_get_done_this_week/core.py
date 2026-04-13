@@ -12,7 +12,7 @@ from .models import (
     DateRange, GitHubContribution, GitHubPullRequest, GitHubIssue,
     CalendarEvent, ClaudeSession, WeeklyReport, WeeklyStats,
     WeeklyHighlights, DailySummary, DocumentationContribution,
-    OutputFormat
+    GoogleDriveItem, OutputFormat
 )
 from .config import Config
 from .formatters import MarkdownFormatter, HTMLFormatter, JSONFormatter
@@ -231,6 +231,50 @@ class WeeklyReviewGenerator:
             # Calendar integration is optional, don't fail the whole process
             return None
 
+    def fetch_google_drive_items(self, date_range: DateRange) -> Optional[List[GoogleDriveItem]]:
+        """Fetch Google Docs and Slides modified during the date range"""
+        if not self.config.enable_calendar:
+            return None
+
+        start_datetime = f"{date_range.start.isoformat()}T00:00:00Z"
+        end_datetime = f"{date_range.end.isoformat()}T23:59:59Z"
+
+        query = (
+            f"(mimeType='application/vnd.google-apps.document' or "
+            f"mimeType='application/vnd.google-apps.presentation') and "
+            f"modifiedTime >= '{start_datetime}' and "
+            f"modifiedTime <= '{end_datetime}'"
+        )
+
+        try:
+            result = subprocess.run([
+                "gws", "drive", "files", "list",
+                "--params", json.dumps({
+                    "q": query,
+                    "fields": "files(id,name,modifiedTime,webViewLink,mimeType)",
+                    "pageSize": 100,
+                }),
+                "--format", "json"
+            ], capture_output=True, text=True, check=True)
+
+            data = json.loads(result.stdout)
+            items = []
+
+            for file in data.get("files", []):
+                items.append(GoogleDriveItem(
+                    title=file["name"],
+                    url=file["webViewLink"],
+                    mime_type=file["mimeType"],
+                    modified_time=datetime.fromisoformat(
+                        file["modifiedTime"].replace("Z", "+00:00")
+                    ),
+                ))
+
+            return items
+
+        except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError):
+            return None
+
     def estimate_claude_activity(self, date_range: DateRange) -> Optional[Dict[str, Any]]:
         """Estimate Claude AI usage during the week"""
         if not self.config.enable_claude_tracking:
@@ -337,6 +381,24 @@ class WeeklyReviewGenerator:
 
         return doc_contributions
 
+    def _build_doc_summary(
+        self,
+        drive_items: Optional[List[GoogleDriveItem]],
+        blog_posts: List[DocumentationContribution],
+    ) -> List[str]:
+        """Build documentation summary for highlights section"""
+        summary = []
+        if drive_items:
+            docs = [i for i in drive_items if i.item_type == "doc"]
+            slides = [i for i in drive_items if i.item_type == "slides"]
+            if docs:
+                summary.append(f"{len(docs)} Google Doc(s)")
+            if slides:
+                summary.append(f"{len(slides)} Google Slides presentation(s)")
+        if blog_posts:
+            summary.append(f"{len(blog_posts)} blog post(s)")
+        return summary
+
     def generate_report(
         self,
         date_range: DateRange,
@@ -377,8 +439,12 @@ class WeeklyReviewGenerator:
             if c.date.weekday() in [5, 6]  # Saturday, Sunday
         )
 
-        # Documentation contributions
-        doc_contributions = self.identify_documentation_contributions(prs_issues)
+        # Documentation contributions (blog posts only)
+        all_doc_contributions = self.identify_documentation_contributions(prs_issues)
+        doc_contributions = [d for d in all_doc_contributions if d.is_blog_post]
+
+        # Google Drive items
+        drive_items = self.fetch_google_drive_items(date_range)
 
         stats = WeeklyStats(
             total_contributions=total_contributions,
@@ -401,8 +467,9 @@ class WeeklyReviewGenerator:
         ]
         if total_prs_created > 0:
             key_achievements.append(f"{total_prs_created} Pull Request(s) created")
-        if doc_contributions:
-            key_achievements.append(f"{len(doc_contributions)} documentation contributions")
+        doc_content_count = len(doc_contributions) + (len(drive_items) if drive_items else 0)
+        if doc_content_count > 0:
+            key_achievements.append(f"{doc_content_count} documentation & content items")
 
         highlights = WeeklyHighlights(
             key_achievements=key_achievements,
@@ -410,10 +477,7 @@ class WeeklyReviewGenerator:
                 f"{total_meetings} professional meetings attended",
                 f"{total_meeting_hours:.1f} hours in meetings",
             ] if calendar_data else [],
-            documentation_summary=[
-                f"{len([d for d in doc_contributions if d.is_blog_post])} blog post(s)",
-                f"{len([d for d in doc_contributions if d.type == 'review'])} documentation PR(s) reviewed",
-            ] if doc_contributions else [],
+            documentation_summary=self._build_doc_summary(drive_items, doc_contributions),
             activity_patterns=[] if is_daily else [
                 pattern for pattern in [
                     f"Most productive day: {most_productive_day.strftime('%A')} with {max_contributions} contributions" if most_productive_day else None,
@@ -490,6 +554,7 @@ class WeeklyReviewGenerator:
             highlights=highlights,
             daily_summaries=daily_summaries,
             documentation_contributions=doc_contributions,
+            google_drive_items=drive_items or [],
             created_prs=created_pr_models,
             created_issues=created_issue_models,
             reviewed_prs=reviewed_pr_models,

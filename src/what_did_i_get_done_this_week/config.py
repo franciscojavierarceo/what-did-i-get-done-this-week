@@ -15,6 +15,32 @@ import click
 console = Console()
 
 
+class ScheduleConfig(BaseModel):
+    """Configuration for automated scheduling"""
+    daily_enabled: bool = False
+    weekly_enabled: bool = False
+    daily_time: str = "09:00"  # 24-hour format HH:MM
+    weekly_time: str = "09:00"
+    weekly_day: str = "monday"  # monday, tuesday, etc.
+    popup_enabled: bool = True
+    notification_timeout: int = 300  # 5 minutes for popup timeout
+    fallback_to_terminal: bool = True
+
+    @validator('weekly_day')
+    def validate_weekday(cls, v):
+        valid_days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+        if v.lower() not in valid_days:
+            raise ValueError(f"Invalid weekday: {v}. Must be one of {valid_days}")
+        return v.lower()
+
+    @validator('daily_time', 'weekly_time')
+    def validate_time(cls, v):
+        import re
+        if not re.match(r'^([01]?[0-9]|2[0-3]):[0-5][0-9]$', v):
+            raise ValueError(f"Invalid time format: {v}. Must be HH:MM in 24-hour format")
+        return v
+
+
 class Config(BaseModel):
     """Configuration settings"""
     github_username: str
@@ -23,6 +49,7 @@ class Config(BaseModel):
     enable_calendar: bool = True
     enable_claude_tracking: bool = True
     config_file: Path = Path.home() / ".config" / "what-did-i-get-done-this-week" / "config.json"
+    schedule: ScheduleConfig = ScheduleConfig()
 
     class Config:
         json_encoders = {
